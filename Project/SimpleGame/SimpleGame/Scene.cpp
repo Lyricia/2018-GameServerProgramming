@@ -24,7 +24,50 @@ void Scene::buildScene()
 	}
 	ChessBoard = m_Renderer->CreatePngTexture("Assets/Image/chess board.png");
 	ChessPiece = m_Renderer->CreatePngTexture("Assets/Image/chess piece.png");
+
+	memset(m_board, 0, sizeof(char) * 64);
+
+
+	InitPieces(*m_BlackPiece, TEAM::BLACK);
+	InitPieces(*m_WhitePiece, TEAM::WHITE);
+
 }
+
+void Scene::InitPieces(vector<Object*>& pieceset, TEAM Side)
+{
+	pieceset.;
+	
+	//	for (int i = 0; i < 8; ++i)
+//	{
+//		pieceset[i].setType(OBJTYPE::PAWN);
+//		pieceset[i].setTeam(Side);
+//
+//		if (Side == TEAM::BLACK)
+//		{
+//			pieceset[i].setPosition(Vec3f(1, i + 1, 0));
+//		}
+//
+//		else if (Side == TEAM::WHITE)
+//		{
+//			pieceset[i].setPosition(Vec3f(8, i + 1, 0));
+//		}
+//	}
+
+	for (int i = 0; i < 16; ++i)
+	{
+		pieceset[i]->setTeam(Side);
+		if (Side == TEAM::BLACK)
+		{
+			pieceset[i]->setPosition(Vec3f((i / 8) + 1, (i % 8) + 1, 0));
+		}
+
+		else if (Side == TEAM::WHITE)
+		{
+			pieceset[i]->setPosition(Vec3f(8 - (i / 8), (i % 8) + 1, 0));
+		}
+	}
+}
+
 
 void Scene::releaseScene()
 {
@@ -58,6 +101,15 @@ void Scene::keyspcialinput(int key)
 {
 	switch (key)
 	{
+	case 'w':
+		break;
+	case 'a':
+		break;
+	case 's':
+		break;
+	case 'd':
+		break;
+
 	default:
 		break;
 	}
@@ -67,12 +119,9 @@ void Scene::keyspcialinput(int key)
 // 밖에서 누르고 안에서 업 할 수도 있기 때문에
 void Scene::mouseinput(int button, int state, int x, int y)
 {
-	//if (y < 0) 
+	if (button == GLUT_LEFT_BUTTON && state == GLUT_UP && GAMESTATUS::RUNNING)
 	{
-		if (button == GLUT_LEFT_BUTTON && state == GLUT_UP && GAMESTATUS::RUNNING)
-		{
-			
-		}
+
 	}
 }
 

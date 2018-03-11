@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include <tchar.h>
 #include <chrono>
-#include <list>
+#include <vector>
 
 #include "Dependencies\glew.h"
 #include "Dependencies\freeglut.h"
@@ -23,10 +23,12 @@ using namespace std;
 enum DIR { LEFT, RIGHT, TOP, BOTTOM };
 
 enum OBJTYPE {
-	OBJ_BUILDING,
-	OBJ_CHARACTER,
-	OBJ_BULLET,
-	OBJ_ARROW
+	PAWN,
+	KING,
+	QUEEN,
+	BISHOP,
+	ROCK,
+	KNIGHT
 };
 
 enum TEAM { WHITE, BLACK };
@@ -35,8 +37,8 @@ enum GAMESTATUS {
 	STOP
 	, RUNNING
 	, PAUSE
-	, REDWIN
-	, BLUEWIN	
+	, BLACKWIN
+	, WHITEWIN	
 };
 
 enum SOUNDINDEX {

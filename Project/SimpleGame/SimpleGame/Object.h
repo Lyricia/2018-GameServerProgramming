@@ -50,6 +50,7 @@ public:
 	void setLifetime(double lifetime) { m_Lifetime = lifetime; }
 	void setLife(double life) { m_Life = life; }
 	void setTeam(int team) { m_Team = team; }
+	void setType(OBJTYPE type) { m_type = type; }
 	void decreaseLife(double dmg) { m_Life -= dmg; m_damagedtime = 0.1f; }
 
 	void move(const double timeElapsed) { m_Position += m_Direction * m_Speed * timeElapsed; };
@@ -67,8 +68,8 @@ public:
 	bool wallchk();
 	bool isIntersect(Object* target);
 
-	virtual void update(const double timeElapsed) = 0;
-	virtual void render(Renderer* renderer, int texID = NULL) = 0;
+	virtual void update(const double timeElapsed) {}
+	virtual void render(Renderer* renderer, int texID = NULL) {}
 
 	void resetObject();
 };

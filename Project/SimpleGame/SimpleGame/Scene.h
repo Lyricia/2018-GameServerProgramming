@@ -19,6 +19,10 @@ private:
 
 	Sound		*m_Sound;
 	int			m_SoundIdx[10] = {};
+	char		m_board[8][8] = {};
+
+	vector<Object*>		*m_BlackPiece;
+	vector<Object*>		*m_WhitePiece;
 
 public:
 	Scene();
@@ -26,6 +30,7 @@ public:
 	void releaseScene();
 
 	void buildScene();
+	void InitPieces(vector<Object*>& pieceset, TEAM side);
 	//void setRenderer(Renderer* g_render) { g_renderer = g_render; }
 	void setTimer(Timer* t) { g_Timer = t; }
 
