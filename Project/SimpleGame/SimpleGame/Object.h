@@ -73,59 +73,6 @@ public:
 	void resetObject();
 };
 
-class Projectile : public Object
-{
-private:
-	int		m_Owner;
-	double	m_AnimationTime = 0.f;
-
-public:
-	Projectile() {};
-	Projectile(OBJTYPE type, int size, Vector3D<float> pos) : Object(type, size, pos) {};
-	~Projectile() {};
-
-	void setOwner(int id) { m_Owner = id; }
-	int getOwner() { return m_Owner; }
-	virtual void update(const double timeElapsed);
-	virtual void render(Renderer* renderer, int texID = NULL);
-};
-
-class Player : public Object
-{
-private:
-	double	m_cooltime = 0;
-	double	m_AnimationTime = 0.f;
-	int		m_AnimationSeqX, m_AnimationSeqY;
-	int		m_MaxSeqX, m_MaxSeqY, m_limitSeqX, m_limitSeqY;
-
-public:
-	Player() {};
-	Player(OBJTYPE type, int size, Vector3D<float> pos) :Object(type, size, pos) {};
-	~Player() {};
-
-	void SetSeq(int mx, int my, int lx, int ly);
-	virtual void update(const double timeElapsed);
-	virtual void render(Renderer* renderer, int texID = NULL);
-	Projectile* ShootArrow();
-	bool cooltimeChk(const double timeElapsed);
-};
-
-class Building : public Object
-{
-private:
-	double		m_cooltime = 0.f;
-
-public:
-	Building() {};
-	Building(int size, Vector3D<float> pos) : Object(OBJTYPE::OBJ_BUILDING, size, pos) {}
-	~Building() {};
-
-	Projectile* ShootBullet();
-	bool cooltimeChk(const double timeElapsed);
-	virtual void update(const double timeElapsed);
-	virtual void render(Renderer* renderer, int texID = NULL);
-};
-
 class Sprite : public Object
 {
 private:
@@ -148,7 +95,7 @@ inline void DrawSolidRectByMatrix(Vector3D<float> pos, Renderer* Renderer, int s
 	Renderer->DrawSolidRect(pos.x, pos.y, pos.z, size, color.r, color.g, color.b, color.a, level);
 }
 
-inline void DrawTexturedSeqRectByMatrix(Vector3D<float> pos, Renderer* Renderer, int size, COLOR color, int x, int y, int totalx, int totaly, GLuint texID, float level)
+inline void DrawTexturedSeqRectByMatrix(Vector3D<float> pos , Renderer* Renderer, int size, COLOR color, int x, int y, int totalx, int totaly, GLuint texID, float level)
 {
 	Renderer->DrawTexturedRectSeq(pos.x, pos.y, pos.z, size, color.r, color.g, color.b, color.a, texID, x, y, totalx, totaly, level);
 }

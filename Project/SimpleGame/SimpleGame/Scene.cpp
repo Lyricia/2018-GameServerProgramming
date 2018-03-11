@@ -23,6 +23,7 @@ void Scene::buildScene()
 		std::cout << "Renderer could not be initialized.. \n";
 	}
 	ChessBoard = m_Renderer->CreatePngTexture("Assets/Image/chess board.png");
+	ChessPiece = m_Renderer->CreatePngTexture("Assets/Image/chess piece.png");
 }
 
 void Scene::releaseScene()
@@ -96,8 +97,8 @@ void Scene::update()
 
 void Scene::render()
 {
-	m_Renderer->DrawTexturedRect(0, 0, 0, 820, 0.5f, 0.5f, 0.5f, 1.0f, ChessBoard, 0.9);
-
+	m_Renderer->DrawTexturedRect(0, 0, 0, 500, 0.5f, 0.5f, 0.5f, 1.0f, ChessBoard, 0.9);
+	m_Renderer->DrawTexturedRectSeq(0, 0, 0, 60, 1, 1, 1, 1, ChessPiece, 0, 0, 6, 2, 0.8);
 	if (GameStatus != GAMESTATUS::STOP)
 	{
 

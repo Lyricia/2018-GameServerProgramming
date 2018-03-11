@@ -14,7 +14,7 @@
 #include "Vector3D.h"
 
 #define WINDOW_HEIGHT	800
-#define WINDOW_WIDTH	500
+#define WINDOW_WIDTH	800
 
 #define EPSILON			0.00001f
 
@@ -29,7 +29,7 @@ enum OBJTYPE {
 	OBJ_ARROW
 };
 
-enum TEAM { BLUE, RED };
+enum TEAM { WHITE, BLACK };
 
 enum GAMESTATUS {
 	STOP

@@ -13,6 +13,7 @@ private:
 	Timer*		g_Timer = nullptr;
 
 	int			ChessBoard;
+	int			ChessPiece;
 
 	GAMESTATUS	GameStatus = GAMESTATUS::STOP;
 
