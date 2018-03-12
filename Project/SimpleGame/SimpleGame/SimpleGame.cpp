@@ -3,7 +3,6 @@
 #include "Scene.h"
 #include "Timer.h"
 
-Renderer	*g_Renderer = NULL;
 Scene*		CurrentScene;
 Timer*		g_Timer;
 
@@ -27,7 +26,6 @@ void Initialize()
 	g_Timer->Init();
 
 	CurrentScene = new Scene();
-	//CurrentScene->setRenderer(g_Renderer);
 	CurrentScene->setTimer(g_Timer);
 	CurrentScene->buildScene();
 }
@@ -97,7 +95,7 @@ int main(int argc, char **argv)
 	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
 	glutInitWindowPosition(0, 0);
 	glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
-	glutCreateWindow("Game Software Engineering KPU");
+	glutCreateWindow("Game Server Programming");
 
 
 
@@ -122,7 +120,6 @@ int main(int argc, char **argv)
 	glutMainLoop();
 
 	CurrentScene->releaseScene();
-	delete g_Renderer;
 
     return 0;
 }

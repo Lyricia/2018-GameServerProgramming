@@ -7,71 +7,38 @@ struct COLOR {
 	float a;
 };
 
+
 class Object
 {
 protected:
 	int					m_id;
 	OBJTYPE				m_type;
 	Vector3D<float>		m_Position;
-	Vector3D<float>		m_Direction;
-	float				m_Speed;
-	int					m_Size;
-	RECT				m_BoundingBox;
-	COLOR				m_DefaultColor;
-	COLOR				m_Color;
-
-	Object*				m_TargetBind = NULL;
-
-	double				m_Life = 0.f;
-	double				m_Lifetime = 0.f;
-	double				m_damagedtime = 0.f;
-
 	int					m_Team;
 
 public:
-	Object() {};
-	Object(OBJTYPE type, int size, Vector3D<float> pos) : m_type(type), m_Position(pos), m_Size(size) {};
-	~Object() { delete m_TargetBind; };
+	Object();
+	Object(OBJTYPE type, int size, Vector3D<float> pos) : m_type(type), m_Position(pos) {};
+	~Object() {};
 	void releaseObject();
 
 	Vector3D<float>	getPosition() { return m_Position; }
-	int				getSize() { return m_Size; }
-	bool			isAlive() { if (m_Life <= 0 || m_Lifetime <= 0) return false; else return true; }
 
 	void setPosition(float x, float y, float z) { m_Position = { x, y, z }; }
 	void setPosition(Vector3D<float> pos) { m_Position = pos; }
-	void setDirection(Vector3D<float> dir) { m_Direction = dir; }
-	void setDirection(float x, float y, float z) { m_Direction = { x, y, z }; }
-	void setSpeed(float speed) { m_Speed = speed; }
-	void setOOBB(RECT boundingbox) { m_BoundingBox = boundingbox; }
-	void setDefaultColor(COLOR color) { m_DefaultColor = m_Color = color; }
-	void setColor(COLOR color) { m_Color = color; }
 	void setID(int id) { m_id = id; }
-	void setLifetime(double lifetime) { m_Lifetime = lifetime; }
-	void setLife(double life) { m_Life = life; }
 	void setTeam(int team) { m_Team = team; }
 	void setType(OBJTYPE type) { m_type = type; }
-	void decreaseLife(double dmg) { m_Life -= dmg; m_damagedtime = 0.1f; }
 
-	void move(const double timeElapsed) { m_Position += m_Direction * m_Speed * timeElapsed; };
-
-	void setTarget(Object* target) { m_TargetBind = target; }
-	Object* getTarget() { return m_TargetBind; }
+	void move(DIR dir);
+	
 	OBJTYPE getType() { return m_type; }
 	int getTeam() { return m_Team; }
-	double getLife() { return m_Life; }
-	double getLifetime() { return m_Lifetime; }
 	const int getID() { return m_id; }
-	Vector3D<float> getDirection() { return m_Direction; }
-	void releaseTarget() { m_TargetBind = nullptr; }
-
-	bool wallchk();
-	bool isIntersect(Object* target);
 
 	virtual void update(const double timeElapsed) {}
 	virtual void render(Renderer* renderer, int texID = NULL) {}
 
-	void resetObject();
 };
 
 class Sprite : public Object

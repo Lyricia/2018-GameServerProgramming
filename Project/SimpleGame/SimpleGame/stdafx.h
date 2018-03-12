@@ -13,22 +13,22 @@
 #include "Dependencies\freeglut.h"
 #include "Vector3D.h"
 
-#define WINDOW_HEIGHT	800
-#define WINDOW_WIDTH	800
+#define WINDOW_HEIGHT	720
+#define WINDOW_WIDTH	720
 
 #define EPSILON			0.00001f
 
 using namespace std;
 
-enum DIR { LEFT, RIGHT, TOP, BOTTOM };
+enum DIR { LEFT, RIGHT, UP, DOWN};
 
 enum OBJTYPE {
-	PAWN,
 	KING,
 	QUEEN,
 	BISHOP,
+	KNIGHT,
 	ROCK,
-	KNIGHT
+	PAWN
 };
 
 enum TEAM { WHITE, BLACK };
@@ -49,3 +49,14 @@ enum SOUNDINDEX {
 	CRASHEFFECT
 };
 
+/*
+  1 2 3 4 5 6 7 8
+1
+2		B
+3
+4
+5
+6
+7		W
+8
+*/

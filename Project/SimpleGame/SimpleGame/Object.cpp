@@ -3,51 +3,33 @@
 #include "Object.h"
 
 
+Object::Object()
+{
+}
+
 void Object::releaseObject()
 {
 }
 
-bool Object::wallchk()
+void Object::move(DIR dir)
 {
-	if (m_Position.x > WINDOW_WIDTH / 2 || m_Position.x < -WINDOW_WIDTH / 2) {
-		m_Direction.x *= -1;
-		m_Position.x += m_Direction.x * 3;
-		return true;
-	}
-	if (m_Position.y > WINDOW_HEIGHT / 2 || m_Position.y < -WINDOW_HEIGHT / 2) {
-		m_Direction.y *= -1;
-		m_Position.y += m_Direction.y * 3;
-		return true;
-	}
-	return false;
-}
-
-bool Object::isIntersect(Object* target)
-{
-	if ((m_Position.x - target->getPosition().x)*(m_Position.x - target->getPosition().x) +
-		(m_Position.y - target->getPosition().y)*(m_Position.y - target->getPosition().y) <
-		(m_Size + target->getSize())*(m_Size + target->getSize())*0.25)
+	switch (dir)
 	{
-		setTarget(target);
-		target->setTarget(this);
-		//setColor(COLOR{ 1,1,1,1 });
-		return true;
-	}
-	else {
-		releaseTarget();
-		target->releaseTarget();
-		//setColor(m_DefaultColor);
-	}
-	return false;
-}
+	case DIR::UP:
+		if (m_Position.y-- < 2) m_Position.y++;
+		break;
+	case DIR::DOWN:
+		if (m_Position.y++ > 7) m_Position.y--;
+		break;
+	case DIR::LEFT:
+		if (m_Position.x-- < 2) m_Position.x++;
+		break;
+	case DIR::RIGHT:
+		if (m_Position.x++ > 7) m_Position.x--;
+		break;
 
-void Object::resetObject()
-{
-	m_Position = { -500, -500, 0 };
-	m_Direction = { 0,0,0 };
-	m_Speed = 0;
-	m_TargetBind = nullptr;
-	m_Life = -1;
+	default:break;
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////

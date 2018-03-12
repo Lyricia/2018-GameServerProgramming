@@ -1,7 +1,7 @@
 #pragma once
 #include "Object.h"
 
-#define MAX_OBJECT 100
+#define PIECESIZE 80
 
 class Timer;
 class Sound;
@@ -17,12 +17,13 @@ private:
 
 	GAMESTATUS	GameStatus = GAMESTATUS::STOP;
 
-	Sound		*m_Sound;
-	int			m_SoundIdx[10] = {};
-	char		m_board[8][8] = {};
+	Sound*		m_Sound;
+	int			m_SoundIdx[10]{};
+	Object*		m_Target = nullptr;
+	int			m_Board[9][9] = {};
 
-	vector<Object*>		*m_BlackPiece;
-	vector<Object*>		*m_WhitePiece;
+	vector<Object*>		m_BlackPiece;
+	vector<Object*>		m_WhitePiece;
 
 public:
 	Scene();
@@ -31,7 +32,7 @@ public:
 
 	void buildScene();
 	void InitPieces(vector<Object*>& pieceset, TEAM side);
-	//void setRenderer(Renderer* g_render) { g_renderer = g_render; }
+	int PieceChk(int x, int y);
 	void setTimer(Timer* t) { g_Timer = t; }
 
 	void keyinput(unsigned char key);
