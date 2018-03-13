@@ -38,12 +38,12 @@ void Scene::InitPieces(vector<Object*>& pieceset, TEAM Side)
 	{
 		Object* piece = new Object();
 		piece->setTeam(Side);
-		piece->setID(i + (16 * Side));
 		if (Side == TEAM::WHITE)
 			pos = Vec3f((i % 8) + 1, 8 - ((15 - i) / 8), 0);
 		else if (Side == TEAM::BLACK)
 			pos = Vec3f((i % 8) + 1, ((15 - i) / 8) + 1, 0);
 		piece->setPosition(pos);
+		piece->setID(10 * pos.x + pos.y);
 
 		if (i < 8)						piece->setType(OBJTYPE::PAWN);
 		else if (i == 8 || i == 15)		piece->setType(OBJTYPE::ROCK);
@@ -145,22 +145,31 @@ void Scene::mouseinput(int button, int state, int x, int y)
 {
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_UP && GAMESTATUS::RUNNING)
 	{
-		Vec3f pos((x + 320) / 80 + 1, (320 - y) / 80 + 1, 0);
-		for (int i = 0; i < 16; ++i)
+		Vec3i pos((x + 320) / 80 + 1, (320 - y) / 80 + 1, 0);
+		if (m_Board[pos.x][pos.y] != 0)
 		{
-			if (m_BlackPiece[i]->getPosition().x == pos.x && m_BlackPiece[i]->getPosition().y == pos.y)
+			for (int i = 0; i < 16; ++i)
 			{
-				m_Target = m_BlackPiece[i];
-				return;
+				if (m_BlackPiece[i]->getPosition().x == pos.x && m_BlackPiece[i]->getPosition().y == pos.y)
+				{
+					m_Target = m_BlackPiece[i];
+					return;
+				}
+			}
+			for (int i = 0; i < 16; ++i)
+			{
+				if (m_WhitePiece[i]->getPosition().x == pos.x && m_WhitePiece[i]->getPosition().y == pos.y)
+				{
+					m_Target = m_WhitePiece[i];
+					return;
+				}
 			}
 		}
-		for (int i = 0; i < 16; ++i)
+		else if (m_Board[pos.x][pos.y] == 0)
 		{
-			if (m_WhitePiece[i]->getPosition().x == pos.x && m_WhitePiece[i]->getPosition().y == pos.y)
-			{
-				m_Target = m_WhitePiece[i];
-				return;
-			}
+			m_Board[(int)m_Target->getPosition().x][(int)m_Target->getPosition().y] = 0;
+			m_Target->setPosition(pos.x, pos.y, 0);
+			m_Board[pos.x][pos.y] = m_Target->getID();
 		}
 	}
 }
@@ -212,12 +221,7 @@ void Scene::render()
 		m_Renderer->DrawSolidRect(
 			-360 + m_Target->getPosition().x * 80,
 			360 - m_Target->getPosition().y * 80,
-			0, 80, 0.5f, 0, 0, 1.0f, 0.7);
-
-	m_Renderer->DrawSolidRect(
-		0,
-		0,
-		0, 80, 0.5f, 0, 0, 1.0f, 0.7);
+			0, 80, 0.5f, 0.5f, 0, 0.5f, 0.7);
 
 	if (GameStatus != GAMESTATUS::STOP)
 	{
