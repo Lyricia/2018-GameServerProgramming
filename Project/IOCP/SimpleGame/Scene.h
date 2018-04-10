@@ -11,7 +11,6 @@ class Server;
 class Scene
 {
 private:
-	Renderer*	m_Renderer = nullptr;
 	Timer*		g_Timer = nullptr;
 
 	int			ChessBoard;

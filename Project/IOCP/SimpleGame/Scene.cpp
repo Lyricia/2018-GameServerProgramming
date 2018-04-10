@@ -1,8 +1,6 @@
 #include "stdafx.h"
 #include "Server.h"
-#include "Renderer.h"
 #include "Timer.h"
-#include "Sound.h"
 #include "Scene.h"
 
 using namespace std;
@@ -17,16 +15,6 @@ Scene::~Scene()
 
 void Scene::buildScene()
 {
-#if GLRENDERON
-	m_Renderer = new Renderer(WINDOW_WIDTH, WINDOW_HEIGHT);
-	// Initialize Renderer
-	if (!m_Renderer->IsInitialized())
-	{
-		std::cout << "Renderer could not be initialized.. \n";
-	}
-	ChessBoard = m_Renderer->CreatePngTexture("Assets/Image/chess board.png");
-	ChessPiece = m_Renderer->CreatePngTexture("Assets/Image/chess piece.png");
-#endif
 	memset(m_Board, INVALID, sizeof(int) * 81);
 	InitPieces(m_BlackPiece, TEAM::BLACK);
 	InitPieces(m_WhitePiece, TEAM::WHITE);
@@ -73,7 +61,6 @@ int Scene::PieceChk(int x, int y)
 
 void Scene::releaseScene()
 {
-	delete		m_Renderer;
 	delete		g_Timer;
 }
 
@@ -101,10 +88,6 @@ void Scene::keyspcialinput(int key)
 // 밖에서 누르고 안에서 업 할 수도 있기 때문에
 void Scene::mouseinput(int button, int state, int x, int y)
 {
-	if (button == GLUT_LEFT_BUTTON && state == GLUT_UP && GameStatus == GAMESTATUS::RUNNING)
-	{
-
-	}
 }
 
 void Scene::update()
@@ -126,34 +109,6 @@ void Scene::update()
 
 void Scene::render()
 {
-	m_Renderer->DrawTexturedRect(0, 0, 0, 720, 1.0f, 1.0f, 1.0f, 1.0f, ChessBoard, 0.9);
-	
-	for (int i = 0; i < 16; ++i)
-	{
-		m_Renderer->DrawTexturedRectSeq(
-			-360 + m_BlackPiece[i]->getPosition().x * 80,
-			360 - m_BlackPiece[i]->getPosition().y * 80,
-			0, PIECESIZE, 1, 1, 1, 1, ChessPiece,
-			m_BlackPiece[i]->getType(),
-			TEAM::BLACK,
-			6, 2, 0.5);
-	}
-	for (int i = 0; i < 16; ++i)
-	{
-		m_Renderer->DrawTexturedRectSeq(
-			-360 + m_WhitePiece[i]->getPosition().x * 80,
-			360 - m_WhitePiece[i]->getPosition().y * 80,
-			0, PIECESIZE, 1, 1, 1, 1, ChessPiece,
-			m_WhitePiece[i]->getType(),
-			TEAM::WHITE,
-			6, 2, 0.5);
-	}
-	if (m_Target != nullptr)
-		m_Renderer->DrawSolidRect(
-			-360 + m_Target->getPosition().x * 80,
-			360 - m_Target->getPosition().y * 80,
-			0, 80, 0.5f, 0.5f, 0, 0.5f, 0.7);
-
 	if (GameStatus != GAMESTATUS::STOP)
 	{
 	

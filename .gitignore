@@ -11,6 +11,10 @@
 /Debug
 /Release
 /x64
+IOCP/vs
+IOCP/Debug
+IOCP/Release
+IOCP/x64
 *.suo
 *.db
 *.opendb

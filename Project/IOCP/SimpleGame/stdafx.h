@@ -28,6 +28,8 @@
 using std::thread;
 using std::list;
 using std::vector;
+using std::cout;
+using std::endl;
 
 
 enum DIR { LEFT, RIGHT, UP, DOWN};
