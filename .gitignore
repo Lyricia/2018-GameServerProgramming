@@ -8,6 +8,7 @@
 *.ilk
 *.tlog
 /vs
+/.vs
 /Debug
 /Release
 /x64
