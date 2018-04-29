@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "Scene.h"
 #include "Server.h"
 
 Server::Server()
@@ -48,7 +49,7 @@ void Server::InitServer()
 	Server_Addr.sin_family = AF_INET;
 	Server_Addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	Server_Addr.sin_port = htons(SERVERPORT);
-	retval = bind(Listen_Sock, (SOCKADDR *)&Server_Addr, sizeof(Server_Addr));
+	retval = ::bind(Listen_Sock, (SOCKADDR *)&Server_Addr, sizeof(Server_Addr));
 	if (retval == SOCKET_ERROR) {
 		std::cout << "Error :: Bind Server Addr" << std::endl;
 		return;
@@ -60,19 +61,23 @@ void Server::InitServer()
 void Server::StartListen()
 {
 	int retval = listen(Listen_Sock, SOMAXCONN);
-
-	// accept()
-	int addrlen = sizeof(SOCKADDR_IN);
-	SOCKET clsock;
-	SOCKADDR_IN cliaddr;
-	std::cout << "Wait Client Accept" << std::endl;
+	std::cout << "Waiting..." << std::endl;
 
 	while (1) {
-		clsock = WSAAccept(Listen_Sock, (SOCKADDR *)&cliaddr, &addrlen, NULL, NULL);
-		if (clsock == INVALID_SOCKET) {
+		SOCKADDR_IN ClientAddr;
+		ZeroMemory(&ClientAddr, sizeof(SOCKADDR_IN));
+		ClientAddr.sin_family = AF_INET;
+		ClientAddr.sin_port = htons(MY_SERVER_PORT);
+		ClientAddr.sin_addr.s_addr = INADDR_ANY;
+		int addrlen = sizeof(SOCKADDR_IN);
+
+		SOCKET ClientAcceptSocket = WSAAccept(Listen_Sock, (SOCKADDR*)&ClientAddr, &addrlen, NULL, NULL);
+		if (ClientAcceptSocket == INVALID_SOCKET) {
 			std::cout << "Error :: Client Accept" << std::endl;
 			return;
 		}
+		else
+			std::cout << "Client Accepted" << std::endl;
 		
 		int ClientKey = -1;
 		for (int i = 0; i < MAX_USER; ++i)
@@ -87,35 +92,81 @@ void Server::StartListen()
 			continue;
 		}
 
-		ClientInfo* clientinput = new ClientInfo();
-		clientinput->Client_Sock = clsock;
-		clientinput->ID = ClientCounter++;
+		//ClientInfo* clientinput = new ClientInfo();
+		//clientinput->Client_Sock = ClientAcceptSocket;
+		//clientinput->ID = ClientKey;
+		//clientinput->x = 4;
+		//clientinput->y = 4;
+
+		Clientlist[ClientKey].Client_Sock = ClientAcceptSocket;
+		Clientlist[ClientKey].x = 4;
+		Clientlist[ClientKey].y = 4;
 		ZeroMemory(&Clientlist[ClientKey].OverlappedEx.wsaOverlapped, sizeof(WSAOVERLAPPED));
 
 		CreateIoCompletionPort(
-			reinterpret_cast<HANDLE*>(clsock),
+			reinterpret_cast<HANDLE*>(ClientAcceptSocket),
 			h_IOCP,
 			ClientKey,
 			0
 		);
 
-		printf("Client %d Connected", clientinput->ID);
+		printf("Client %d Connected", ClientKey);
 		
 		DWORD RecvByte = 0;
 		DWORD flag = 0;
 
-		clientinput->inUse = true;
+		Clientlist[ClientKey].inUse = true;
+		Clientlist[ClientKey].viewlist.clear();
 
 		WSARecv(
-			clientinput->Client_Sock, 
-			&clientinput->OverlappedEx.wsaBuf, 
+			Clientlist[ClientKey].Client_Sock,
+			&Clientlist[ClientKey].OverlappedEx.wsaBuf,
 			1, 
 			NULL,
 			&flag, 
-			&clientinput->OverlappedEx.wsaOverlapped, 
+			&Clientlist[ClientKey].OverlappedEx.wsaOverlapped,
 			NULL
 		);
 
+
+		sc_packet_put_player p;
+		p.id = ClientKey;
+		p.size = sizeof(sc_packet_put_player);
+		p.type = SC_PUT_PLAYER;
+		p.x = Clientlist[ClientKey].x;
+		p.y = Clientlist[ClientKey].y;
+		// to all players
+		for (int i = 0; i < MAX_USER; ++i)
+		{
+			if (true == Clientlist[i].inUse) {
+				if (!CanSee(i, ClientKey))
+					continue;
+
+				Clientlist[i].viewlist_mutex.lock();
+				Clientlist[i].viewlist.insert(ClientKey);
+				Clientlist[i].viewlist_mutex.unlock();
+				SendPacket(i, &p);
+			}
+		}
+		// to me
+		for (int i = 0; i < MAX_USER; ++i)
+		{
+			if (i != ClientKey && true == Clientlist[i].inUse)
+			{
+				if (!CanSee(ClientKey, i))
+					continue;
+
+				Clientlist[i].viewlist_mutex.lock();
+				Clientlist[ClientKey].viewlist.insert(i);
+				Clientlist[i].viewlist_mutex.unlock();
+
+				p.id = i;
+				p.x = Clientlist[i].x;
+				p.y = Clientlist[i].y;
+
+				SendPacket(ClientKey, &p);
+			}
+		}
 	}
 }
 
@@ -124,12 +175,31 @@ void Server::CloseServer()
 	for (auto& t : WorkerThreads)
 		t.join();
 
-	//Client_list.clear();
-	MsgQueue.clear();
-
 	closesocket(Listen_Sock);
 
 	WSACleanup();
+}
+
+void Server::SendPacket(int clientkey, void * packet)
+{
+	stOverlappedEx* o = new stOverlappedEx();
+	char* p = reinterpret_cast<char*>(packet);
+	memcpy(o->io_Buf, packet, p[0]);
+	o->eOperation = op_Send;
+	o->wsaBuf.buf = o->io_Buf;
+	o->wsaBuf.len = p[0];
+	ZeroMemory(&o->wsaOverlapped, sizeof(WSAOVERLAPPED));
+
+	WSASend(Clientlist[clientkey].Client_Sock, &o->wsaBuf, 1, NULL, 0, &o->wsaOverlapped, NULL);
+}
+
+bool Server::CanSee(int a, int b)
+{
+	int distance =
+		(Clientlist[a].x - Clientlist[b].x) * (Clientlist[a].x - Clientlist[b].x) +
+		(Clientlist[a].y - Clientlist[b].y) * (Clientlist[a].y - Clientlist[b].y);
+
+	return distance <= VIEW_RADIUS * VIEW_RADIUS;
 }
 
 void Server::WorkThreadProcess(Server* server)
@@ -175,7 +245,9 @@ void Server::WorkThreadProcess(Server* server)
 
 				if (remainsize <= r_size) {
 					memcpy(cl->prev_packet + cl->prev_packetsize, ptr, remainsize);
-					//ProcessPacket(key, cl->prev_packet);
+
+					server->m_pScene->ProcessPacket(key, cl->prev_packet);
+
 					r_size -= remainsize;
 					ptr += remainsize;
 					cl->packetsize = 0;

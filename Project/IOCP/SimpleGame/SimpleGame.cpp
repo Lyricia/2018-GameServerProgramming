@@ -19,6 +19,8 @@ void Initialize()
 	CurrentScene->setTimer(g_Timer);
 	CurrentScene->SetServer(MainServer);
 	CurrentScene->buildScene();
+
+	MainServer->RegisterScene(CurrentScene);
 }
 
 void SceneChanger(Scene* scene) {
@@ -30,15 +32,17 @@ int main(int argc, char **argv)
 	CMiniDump::Begin();
 	MainServer = new Server();
 	MainServer->InitServer();
-
-	while (!MainServer->IsReady());
-
 	Initialize();
+	MainServer->StartListen();
 
-	while (1)
-	{
-		CurrentScene->update();
-	}
+	//while (!MainServer->IsReady());
+	//
+	//Initialize();
+	//
+	//while (1)
+	//{
+	//	CurrentScene->update();
+	//}
 
 	CurrentScene->releaseScene();
 

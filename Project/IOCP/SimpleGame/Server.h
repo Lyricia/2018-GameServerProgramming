@@ -1,11 +1,12 @@
 #pragma once
 
-
-#define SERVERPORT		9000
+#define SERVERPORT		4000
 #define MSGSIZE			5
 #define MAX_PACKET_SIZE 255
 #define MAX_BUF_SIZE	4096
 #define MAX_USER		10
+
+class Scene;
 
 enum MSGTYPE
 {
@@ -35,6 +36,9 @@ struct ClientInfo
 	int				prev_packetsize;
 	char			prev_packet[MAX_PACKET_SIZE];
 	CHAR			x, y;
+
+	std::unordered_set<int>	viewlist;
+	std::mutex				viewlist_mutex;
 };
 
 
@@ -48,11 +52,12 @@ private:
 
 	ClientInfo			Clientlist[MAX_USER];
 
-	std::list<thread>		WorkerThreads;
-	std::list<char*>		MsgQueue;
+	std::thread			AccessThread;
+	std::list<thread>	WorkerThreads;
 
-	bool			ReadyToGo = false;
 	UINT			ClientCounter = 0;
+
+	Scene*			m_pScene = NULL;
 
 public:
 	Server();
@@ -61,10 +66,14 @@ public:
 	void InitServer();
 	void StartListen();
 	void CloseServer();
-	bool IsReady() { return ReadyToGo; };
+	void SendPacket(int clientkey, void* packet);
+	void RegisterScene(Scene* scene) { m_pScene = scene; }
+
+	ClientInfo& GetClient(int id) { return Clientlist[id]; }
+	ClientInfo* GetClientlist() { return Clientlist; }
+
+	bool CanSee(int a, int b);
 
 	static void WorkThreadProcess(Server* server);
-
-	std::list<char*> GetMsgqueue() { return MsgQueue; }
 };
 

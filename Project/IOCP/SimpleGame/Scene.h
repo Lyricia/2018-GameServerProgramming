@@ -5,8 +5,8 @@
 #define INVALID -1
 
 class Timer;
-class Sound;
 class Server;
+class ClientInfo;
 
 class Scene
 {
@@ -18,15 +18,13 @@ private:
 
 	GAMESTATUS	GameStatus = GAMESTATUS::STOP;
 
-	Sound*		m_Sound;
-	int			m_SoundIdx[10]{};
 	Object*		m_Target = nullptr;
 	int			m_Board[9][9] = {-1};
+	
+	vector<Object*> m_Playerlist;
 
-	vector<Object*>		m_BlackPiece;
-	vector<Object*>		m_WhitePiece;
-
-	Server*		m_Server;
+	Server*			m_Server;
+	ClientInfo*		m_pClientlist;
 
 public:
 	Scene();
@@ -40,16 +38,12 @@ public:
 	int PieceChk(int x, int y);
 	void setTimer(Timer* t) { g_Timer = t; }
 
-	void keyinput(unsigned char key);
-	void keyspcialinput(int key);
-	void mouseinput(int button, int state, int x, int y);
-
 	GAMESTATUS GetGamestatus() { return GameStatus; }
 	void SetGamestatus(GAMESTATUS s) { GameStatus = s; }
 
-	void update();
-	void render();
+	void ProcessPacket(int id, char* packet);
 
-	void ProcessMsg();
+	void update();
+
 	//void SendToClient();
 };

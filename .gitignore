@@ -22,3 +22,5 @@ IOCP/x64
 *.ipdb
 *.iobj
 *.zip
+Project/Server/.vs/Server/v15/.suo
+Project/Server/.vs/Server/v15/Browse.VC.db

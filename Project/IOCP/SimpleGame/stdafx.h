@@ -13,8 +13,10 @@
 #include <mutex>
 #include <map>
 #include <WS2tcpip.h>
+#include <unordered_set>
 
 #include "Vector3D.h"
+#include "protocol.h"
 
 #pragma comment(lib, "ws2_32")
 
