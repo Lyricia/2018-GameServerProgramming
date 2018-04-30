@@ -1,48 +1,10 @@
 #include "stdafx.h"
+#include "Scene.h"
 #include "Client.h"
-
-int recvn(SOCKET s, char *buf, int len, int flags)
-{
-	int received;
-	char *ptr = buf;
-	int left = len;
-
-	while (left > 0) {
-		received = recv(s, ptr, left, flags);
-		if (received == SOCKET_ERROR)
-			return SOCKET_ERROR;
-		else if (received == 0)
-			break;
-		left -= received;
-		ptr += received;
-	}
-
-	return (len - left);
-}
-
-void RecvThreadFunc(SOCKET clientsock, std::list<char*> *MsgQueue)
-{
-	int retval = 0;
-	SOCKADDR_IN clientaddr;
-	int addrlen = sizeof(clientaddr);
-
-	getpeername(clientsock, (SOCKADDR *)&clientaddr, &addrlen);
-
-	while (1)
-	{
-		char* buf = new char[MSGSIZE];
-		retval = recvn(clientsock, buf, MSGSIZE, 0);
-		MsgQueueLocker.lock();
-		MsgQueue->push_back(buf);
-		MsgQueueLocker.unlock();
-	}
-	return;
-}
 
 Client::Client()
 {
 }
-
 
 Client::~Client()
 {
@@ -54,7 +16,7 @@ void Client::InitClient()
 	std::cout << "Enter ServerIP (default : 0) : ";
 	std::cin >> Server_IP;
 	if (!strcmp(Server_IP, "0"))
-		strcpy_s(Server_IP, sizeof("127.0.0.1"), "127.0.0.1");
+		strcpy_s(Server_IP, sizeof(DEFAULTIP), DEFAULTIP);
 
 	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
 	{
@@ -68,19 +30,25 @@ void Client::InitClient()
 		exit(1);
 	}
 
-	Server_Addr;
 	ZeroMemory(&Server_Addr, sizeof(Server_Addr));
 	Server_Addr.sin_family = AF_INET;
 	inet_pton(AF_INET, Server_IP, &Server_Addr.sin_addr);
 	Server_Addr.sin_port = htons(SERVERPORT);
 
-	retval = connect(Server_Sock, (SOCKADDR *)&Server_Addr, sizeof(Server_Addr));
+	retval = WSAConnect(Server_Sock, (sockaddr *)&Server_Addr, sizeof(Server_Addr), NULL, NULL, NULL, NULL);
 	if (retval == SOCKET_ERROR) {
 		std::cout << "Error :: Connect Server" << std::endl;
 		exit(1);
 	}
 
-	RecvThread = std::thread{ RecvThreadFunc, Server_Sock, &MsgQueue };
+	send_wsabuf.buf = send_buffer;
+	send_wsabuf.len = MAX_BUFF_SIZE;
+	recv_wsabuf.buf = recv_buffer;
+	recv_wsabuf.len = MAX_BUFF_SIZE;
+
+	hWsaEvent = WSACreateEvent();
+	WSAEventSelect(Server_Sock, hWsaEvent, FD_CLOSE | FD_READ);
+	recvThread = thread{ [&]() { CompletePacket(); } };
 }
 
 void Client::StartClient()
@@ -89,8 +57,6 @@ void Client::StartClient()
 
 void Client::CloseClient()
 {
-	RecvThread.join();
-
 	closesocket(Server_Sock);
 	printf("Client Disconnected :: IP : %s, PORT : %d\n", Server_IP, ntohs(Server_Addr.sin_port));
 
@@ -99,29 +65,77 @@ void Client::CloseClient()
 	WSACleanup();
 }
 
-int Client::SendMsg(int id, int x, int y)
+void Client::CompletePacket()
 {
-	char buf[MSGSIZE];
-	buf[0] = MSGTYPE::MOVE;
-	buf[1] = id;
-	buf[2] = x;
-	buf[3] = y;
+	DWORD iobyte = 0, ioflag = 0;
+	int ret;
+	while (true) {
+		ret = WSAWaitForMultipleEvents(1, &hWsaEvent, FALSE, WSA_INFINITE, FALSE);
+		if (ret == WSA_WAIT_FAILED || ret == WSA_WAIT_TIMEOUT) 
+			continue;
 
-	return send(Server_Sock, buf, sizeof(buf), 0);
+		WSAEnumNetworkEvents(Server_Sock, hWsaEvent, &netEvents);
+
+		if (netEvents.lNetworkEvents & FD_READ) 
+		{
+			if (netEvents.iErrorCode[FD_READ_BIT] != 0)
+			{
+				int err_code = WSAGetLastError();
+				printf("Recv Error [%d]\n", err_code);
+				continue;
+			}
+
+			ret = WSARecv(Server_Sock, &recv_wsabuf, 1, &iobyte, &ioflag, NULL, NULL);
+			if (ret) {
+				int err_code = WSAGetLastError();
+				printf("Recv Error [%d]\n", err_code);
+				continue;
+			}
+
+			BYTE *ptr = reinterpret_cast<BYTE *>(recv_buffer);
+
+			while (0 != iobyte)
+			{
+				if (0 == in_packet_size)
+					in_packet_size = ptr[0];
+
+				if (iobyte + saved_packet_size >= in_packet_size)
+				{
+					memcpy(packet_buffer + saved_packet_size, ptr, in_packet_size - saved_packet_size);
+
+					pScene->ProcessPacket(packet_buffer);
+
+					ptr += in_packet_size - saved_packet_size;
+					iobyte -= in_packet_size - saved_packet_size;
+					in_packet_size = 0;
+					saved_packet_size = 0;
+				}
+				else
+				{
+					memcpy(packet_buffer + saved_packet_size, ptr, iobyte);
+					saved_packet_size += iobyte;
+					iobyte = 0;
+				}
+			}
+		}
+		if (netEvents.lNetworkEvents & FD_CLOSE)
+		{
+			int err_code = WSAGetLastError();
+			printf("Recv Error [%d]\n", err_code);
+			break;
+		}
+	}
 }
 
-int Client::SendMsg(char * buf)
+void Client::SendPacket(char* packet)
 {
-	return send(Server_Sock, buf, MSGSIZE, 0);
-}
+	DWORD iobyte = 0;
 
-
-
-void Client::SendHeartBeat()
-{
-	char buf[MSGSIZE];
-	buf[0] = MSGTYPE::HEARTBEAT;
-	buf[1] = ID;
-
-	send(Server_Sock, buf, sizeof(buf), 0);
+	memcpy(send_buffer, packet, packet[0]);
+	send_wsabuf.len = packet[0];
+	int ret = WSASend(Server_Sock, &send_wsabuf, 1, &iobyte, 0, NULL, NULL);
+	if (ret) {
+		int error_code = WSAGetLastError();
+		printf("Error while sending packet [%d]", error_code);
+	}
 }

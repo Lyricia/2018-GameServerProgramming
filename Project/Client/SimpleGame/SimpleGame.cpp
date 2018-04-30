@@ -9,7 +9,6 @@ Scene*		CurrentScene;
 Timer*		g_Timer;
 Client*		Connector;
 
-
 void RenderScene(void)
 {
 	CurrentScene->update();
@@ -31,9 +30,14 @@ void Initialize()
 
 	CurrentScene = new Scene();
 	CurrentScene->setTimer(g_Timer);
-	CurrentScene->setClient(Connector);
 	CurrentScene->buildScene();
+
+	Connector = new Client();
+	Connector->InitClient();
+	CurrentScene->setClient(Connector);
+	Connector->RegisterScene(CurrentScene);
 }
+
 
 void Idle(void)
 {
@@ -96,17 +100,15 @@ void SceneChanger(Scene* scene) {
 int main(int argc, char **argv)
 { 
 	CMiniDump::Begin();
-	Connector = new Client();
-	Connector->InitClient();
 
 	// Initialize GL things
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
-	glutInitWindowPosition(0, 0);
+	glutInitWindowPosition(100, 100);
 	glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
 	glutCreateWindow("Game Client Programming");
-
 	glewInit();
+
 	if (glewIsSupported("GL_VERSION_3_0"))
 	{
 		std::cout << " GLEW Version is 3.0\n ";
@@ -115,7 +117,7 @@ int main(int argc, char **argv)
 	{
 		std::cout << "GLEW 3.0 not supported\n ";
 	}
-	
+
 	Initialize();
 
 	glutDisplayFunc(RenderScene);
@@ -130,4 +132,5 @@ int main(int argc, char **argv)
 	CMiniDump::End();
     return 0;
 }
+
 

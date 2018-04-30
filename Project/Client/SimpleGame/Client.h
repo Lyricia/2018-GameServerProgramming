@@ -1,10 +1,7 @@
 #pragma once
-#include <WS2tcpip.h>
-#pragma comment(lib, "ws2_32")
+#define DEFAULTIP	"127.0.0.1"
 
-#define SERVERPORT	9000
-#define MSGSIZE		5
-
+class Scene;
 
 enum MSGTYPE
 {
@@ -17,32 +14,32 @@ enum MSGTYPE
 class Client
 {
 	WSADATA				wsa;
-	int					ID;
+	Scene*				pScene;
 
 	SOCKET				Server_Sock;
 	SOCKADDR_IN			Server_Addr;
-	char				Server_IP[INET_ADDRSTRLEN];
+	char				Server_IP[22];
 
-	std::thread			RecvThread;
+	WSAEVENT			hWsaEvent;
+	WSANETWORKEVENTS	netEvents;
+	thread				recvThread;
 
-	Vec3i				Position;
+	WSABUF				send_wsabuf;
+	char 				send_buffer[MAX_BUFF_SIZE];
+	WSABUF				recv_wsabuf;
+	char				recv_buffer[MAX_BUFF_SIZE];
+	char				packet_buffer[MAX_BUFF_SIZE];
+	DWORD				in_packet_size = 0;
+	int					saved_packet_size = 0;
+
 public:
-	std::list<char*>		MsgQueue;
-
 	Client();
 	~Client();
 	void InitClient();
 	void StartClient();
 	void CloseClient();
-	int SendMsg(int id, int x, int y);
-	int SendMsg(char* buf);
-	void SendHeartBeat();
-
-	void SetPosition(int x, int y) { Position.x = x, Position.y = y; }
-	Vec3i GetPosition() { return Position; }
-	void SetID(int _ID) { ID = _ID; };
-	int GetID() { return ID; }
+	void CompletePacket();
+	
+	void RegisterScene(Scene* s) { pScene = s; }
+	void SendPacket(char* packet);
 };
-
-int recvn(SOCKET s, char *buf, int len, int flags);
-void RecvThreadFunc(SOCKET clientsock, std::list<char*> *MsgQueue);
