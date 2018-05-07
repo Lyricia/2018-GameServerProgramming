@@ -55,6 +55,16 @@ void Server::InitServer()
 		return;
 	}
 	
+	for (int i = NPC_START; i < NUM_OF_NPC; ++i) {
+		Clientlist[i].x = rand() % BOARD_WIDTH;
+		Clientlist[i].y = rand() % BOARD_HEIGHT;
+		Clientlist[i].inUse = true;
+		Clientlist[i].bActive = false;
+		AddTimer(i, enumOperation::op_Move, MOVE_TIME);
+	}
+
+	TimerThread = thread{ [this]() { TimerThreadProcess(); } };
+
 	std::cout << "Server Initiated" << std::endl;
 }
 
@@ -161,6 +171,24 @@ void Server::StartListen()
 				SendPacket(ClientKey, &p);
 			}
 		}
+
+		for (int i = NPC_START; i < NUM_OF_NPC; ++i)
+		{
+			if (!CanSee(ClientKey, i))
+				continue;
+
+			Clientlist[i].viewlist_mutex.lock();
+			Clientlist[ClientKey].viewlist.insert(i);
+			Clientlist[i].bActive = true;
+			Clientlist[i].viewlist_mutex.unlock();
+
+			p.id = i;
+			p.x = Clientlist[i].x;
+			p.y = Clientlist[i].y;
+
+			SendPacket(ClientKey, &p);
+			//AddTimer(i, enumOperation::op_Move, MOVE_TIME);
+		}
 	}
 }
 
@@ -231,14 +259,14 @@ void Server::WorkThreadProcess(Server* server)
 			server->DisConnectClient(key);
 			continue;
 		}
-		else if (datasize == 0)
+		else if (datasize == 0 && key < NPC_START)
 		{
 			std::cout << "Client " << key << " Disconnected" << std::endl;
 			server->DisConnectClient(key);
 			continue;
 		}
 
-		if (op_Recv == oEx->eOperation)
+		if (oEx->eOperation == enumOperation::op_Recv)
 		{
 			int r_size = datasize;
 			char* ptr = oEx->io_Buf;
@@ -271,11 +299,67 @@ void Server::WorkThreadProcess(Server* server)
 			ZeroMemory(&oEx->wsaOverlapped, sizeof(OVERLAPPED));
 			WSARecv(cl->Client_Sock, &oEx->wsaBuf, 1, NULL, &rFlag, &oEx->wsaOverlapped, NULL);
 		}
+		else if (oEx->eOperation == enumOperation::op_Move) {
+			server->MoveNPC(key);
+			delete oEx;
+		}
 		else
 		{
 			delete oEx;
 		}
 	}
+}
+
+void Server::TimerThreadProcess()
+{
+	while (true) {
+		Sleep(1);
+		while (true) {
+			EventMutex.lock();
+			if (EventQueue.empty()) {
+				EventMutex.unlock();
+				break;
+			}
+			
+			sEvent e = EventQueue.top();
+			if (e.startTime > GetTime()) {
+				EventMutex.unlock();
+				break;
+			}
+			
+			EventQueue.pop();
+			EventMutex.unlock();
+
+			if (e.operation == enumOperation::op_Move)
+			{
+				stOverlappedEx* o = new stOverlappedEx();
+				o->eOperation = op_Move;
+				
+				PostQueuedCompletionStatus(h_IOCP, 0, e.id, reinterpret_cast<LPOVERLAPPED>(o));
+			}
+		}
+	}
+}
+
+void Server::AddTimer(UINT id, enumOperation op, long long time)
+{
+	sEvent e;
+	e.id = id;
+	e.operation = op;
+	e.startTime = GetTime() + time;
+
+	EventMutex.lock();
+	EventQueue.push(e);
+	EventMutex.unlock();
+}
+
+long long Server::GetTime()
+{
+	const long long _Freq = _Query_perf_frequency();	// doesn't change after system boot
+	const long long _Ctr = _Query_perf_counter();
+	const long long _Whole = (_Ctr / _Freq) * 1000;
+	const long long _Part = (_Ctr % _Freq) * 1000 / _Freq;
+	return _Whole + _Part;
 }
 
 bool Server::CanSee(int a, int b)
@@ -295,16 +379,94 @@ void Server::DisConnectClient(int key)
 	p.id = key;
 	p.size = sizeof(sc_packet_remove_player);
 	p.type = SC_REMOVE_PLAYER;
-	for (int id : Clientlist[key].viewlist)
+
+	Clientlist[key].viewlist_mutex.lock();
+	std::unordered_set<int> oldviewlist = Clientlist[key].viewlist;
+	Clientlist[key].viewlist.clear();
+	Clientlist[key].viewlist_mutex.unlock();
+
+	for (int id : oldviewlist)
 	{
+		Clientlist[id].viewlist_mutex.lock();
 		if (Clientlist[id].inUse == true)
 		{
 			if (Clientlist[id].viewlist.count(key) != 0) {
+				Clientlist[id].viewlist.erase(key);
+				Clientlist[id].viewlist_mutex.unlock();
+
 				SendPacket(id, &p);
 			}
+			else
+				Clientlist[id].viewlist_mutex.unlock();
+		}
+		else
+			Clientlist[id].viewlist_mutex.unlock();
+	}
+
+	Clientlist[key].inUse = false;
+
+	m_pScene->RemovePlayerOnBoard(Clientlist[key].x, Clientlist[key].y);
+}
+
+void Server::MoveNPC(int key)
+{
+	AddTimer(key, op_Move, MOVE_TIME);
+
+	if (Clientlist[key].bActive == false)
+		return;
+
+ 	switch (rand() % 4) {
+	case 0:
+		if (Clientlist[key].x == BOARD_WIDTH)	break;
+		Clientlist[key].x++;					break;
+	case 1:
+		if (Clientlist[key].x == 0)				break;
+		Clientlist[key].x--;					break;
+	case 2:
+		if (Clientlist[key].y == BOARD_HEIGHT)	break;
+		Clientlist[key].y++;					break;
+	case 3:
+		if (Clientlist[key].y == 0)				break;
+		Clientlist[key].y--;					break;
+	}
+
+	std::unordered_set<int> new_view_list;
+	for (int playerid = 0; playerid < MAX_USER; ++playerid) {
+		if (Clientlist[playerid].inUse == false) continue;
+		if (CanSee(key, playerid) == false) {
+			Clientlist[playerid].viewlist_mutex.lock();
+			if (Clientlist[playerid].viewlist.count(key) != 0) {
+				Clientlist[playerid].viewlist.erase(key);
+				Clientlist[playerid].viewlist_mutex.unlock();
+				SendRemoveObject(playerid, key);
+			}
+			else
+				Clientlist[playerid].viewlist_mutex.unlock();
+
+			continue;
+		}
+		new_view_list.insert(playerid);
+	}
+
+	// NPC가 볼 수 있는 Player
+	for (auto id : new_view_list) {
+		Clientlist[id].viewlist_mutex.lock();
+		if (Clientlist[id].viewlist.count(key) == 0) {
+			Clientlist[id].viewlist.insert(key);
+			Clientlist[id].viewlist_mutex.unlock();
+
+			SendPutObject(id, key);
+		}
+		else {
+			sc_packet_pos sp;
+			sp.id = key;
+			sp.size = sizeof(sc_packet_pos);
+			sp.type = SC_POS;
+			sp.x = Clientlist[key].x;
+			sp.y = Clientlist[key].y;
+			Clientlist[id].viewlist_mutex.unlock();
+
+			SendPacket(id, &sp);
 		}
 	}
-	Clientlist[key].viewlist.clear();
-	Clientlist[key].inUse = false;
-	m_pScene->RemovePlayerOnBoard(Clientlist[key].x, Clientlist[key].y);
 }

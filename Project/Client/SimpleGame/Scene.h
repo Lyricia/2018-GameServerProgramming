@@ -1,6 +1,6 @@
 #pragma once
 
-#define PIECESIZE 60
+#define PIECESIZE 30
 
 class Timer;
 class Client;

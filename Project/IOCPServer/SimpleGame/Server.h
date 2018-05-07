@@ -9,7 +9,7 @@ enum MSGTYPE
 	REMOVECLIENT
 };
 
-enum enumOperation {op_Send, op_Recv};
+enum enumOperation {op_Send, op_Recv, op_Move};
 
 struct stOverlappedEx 
 {
@@ -26,15 +26,34 @@ struct ClientInfo
 	int				ID = NULL;
 
 	bool			inUse;
+	bool			bActive;
 	int				packetsize;
 	int				prev_packetsize;
 	char			prev_packet[MAX_PACKET_SIZE];
-	CHAR			x, y;
+	SHORT			x, y;
 
 	std::unordered_set<int>	viewlist;
 	std::mutex				viewlist_mutex;
 };
 
+struct NPCInfo {
+	int				ID = NULL;
+	SHORT			x, y;
+	bool			inUse;
+};
+
+struct sEvent 
+{
+	long long		startTime = 0;
+	enumOperation	operation;
+	UINT			id;
+};
+
+struct cmp{
+    bool operator()(sEvent t, sEvent u){
+        return t.startTime > u.startTime;
+    }
+};
 
 class Server
 {
@@ -44,10 +63,14 @@ private:
 	SOCKADDR_IN			Server_Addr;
 	HANDLE				h_IOCP;
 
-	ClientInfo			Clientlist[MAX_USER];
+	ClientInfo			Clientlist[NUM_OF_NPC];
 
 	std::thread			AccessThread;
+	std::thread			TimerThread;
 	std::list<thread>	WorkerThreads;
+
+	std::priority_queue<sEvent, vector<sEvent>, cmp>	EventQueue;
+	std::mutex					EventMutex;
 
 	UINT			ClientCounter = 0;
 
@@ -68,9 +91,15 @@ public:
 
 	ClientInfo& GetClient(int id) { return Clientlist[id]; }
 	ClientInfo* GetClientlist() { return Clientlist; }
+	void AddTimer(UINT id, enumOperation op, long long time);
+
+	long long GetTime();
 
 	bool CanSee(int a, int b);
 	void DisConnectClient(int id);
+	void MoveNPC(int key);
 
 	static void WorkThreadProcess(Server* server);
+	void TimerThreadProcess();
 };
+

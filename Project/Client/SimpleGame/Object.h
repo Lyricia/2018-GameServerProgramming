@@ -15,6 +15,7 @@ protected:
 	OBJTYPE				m_type;
 	Vector3D<float>		m_Position;
 	int					m_Team;
+	float				m_Priority;
 
 public:
 	Object();
@@ -30,12 +31,14 @@ public:
 	void setID(int id) { m_id = id; }
 	void setTeam(int team) { m_Team = team; }
 	void setType(OBJTYPE type) { m_type = type; }
+	void setPriority(float pri) { m_Priority = pri; }
 
 	void move(DIR dir);
 	
 	OBJTYPE getType() { return m_type; }
 	int getTeam() { return m_Team; }
 	const int getID() { return m_id; }
+	const float getPriority() { return m_Priority; }
 
 	virtual void update(const double timeElapsed) {}
 	virtual void render(Renderer* renderer, int texID = NULL) {}

@@ -120,61 +120,6 @@ void Scene::update()
 	}
 }
 
-void Scene::render()
-{
-	int currx = Player->getPosition().x, curry = Player->getPosition().y;
-	int t = (currx + curry) % 2;
-	
-	for (int i = 0; i < 8; ++i)
-		for (int j = 0; j < 8; ++j) {
-			m_Renderer->DrawSolidRect(
-				-390 + 120 * i - 60 * t,
-				330 - 120 * j,
-				0, 60, 0.416f, 0.236f, 0.136f, 0.3, 0.9);
-			m_Renderer->DrawSolidRect(
-				-390 + 120 * i + 60 * t + 60,
-				330 - 120 * j + 60,
-				0, 60, 0.416f, 0.236f, 0.136f, 0.3, 0.9);
-		}
-	
-	for (auto p : m_Players)
-	{
-		if (p == Player) {
-			m_Renderer->DrawTexturedRectSeq(
-				-30, 30, 0, PIECESIZE, 1, 1, 1, 1, ChessPiece,
-				p->getType(),
-				p->getTeam(),
-				6, 2, 0.5);
-			m_Renderer->DrawSolidRect(-30, 30, 0, 60, 1, 1, 0, 0.5, 0.7);
-		}
-
-		else {
-			m_Renderer->DrawTexturedRectSeq(
-				-330 + (5 + p->getPosition().x - currx) * 60,
-				330 - (5 + p->getPosition().y - curry) * 60,
-				0, PIECESIZE, 1, 1, 1, 1, ChessPiece,
-				p->getType(),
-	 			p->getTeam(),
-				6, 2, 0.5);
-		}
-	}
-
-	char buf[100];
-	sprintf(buf, "( %d, %d )", currx, curry);
-	m_Renderer->DrawTextW(0, 0, GLUT_BITMAP_HELVETICA_18, 0.5, 0, 0.5, buf);
-
-
-	int note_x = (int)(Player->getPosition().x + 6) % 12, note_y = ((int)Player->getPosition().y + 6) % 12;
-	m_Renderer->DrawSolidRect(
-		330 - 60 * note_x,
-		-330 + 60 * note_y,
-		0, 60, 1, 1, 0, 1, 0.9
-	);
-
-	sprintf(buf, "( %d, %d )", currx - note_x + 6, curry - note_y + 6);
-	m_Renderer->DrawTextW(330 - 60 * note_x - 15, -330 + 60 * note_y - 20, GLUT_BITMAP_HELVETICA_18, 0.5, 0, 0.5, buf);
-}
-
 void Scene::ProcessPacket(char * p)
 {
 	switch (p[1])
@@ -189,10 +134,19 @@ void Scene::ProcessPacket(char * p)
 			Player = cl;
 			cl->setType(OBJTYPE::KING);
 			cl->setTeam(TEAM::WHITE);
+			cl->setPriority(0.1);
 		}
 		else {
-			cl->setType(OBJTYPE::PAWN);
-			cl->setTeam(TEAM::BLACK);
+			if (cl->getID() > NPC_START) {
+				cl->setType(OBJTYPE::PAWN);
+				cl->setTeam(TEAM::BLACK);
+				cl->setPriority(0.5);
+			}
+			else {
+				cl->setType(OBJTYPE::BISHOP);
+				cl->setTeam(TEAM::WHITE);
+				cl->setPriority(0.3);
+			}
 		}
 		m_Players.push_back(cl);
 		m_Board[my_packet->x][my_packet->y] = my_packet->id;
@@ -229,5 +183,69 @@ void Scene::ProcessPacket(char * p)
 
 	default:
 		printf("Unknown PACKET type [%d]\n", p[1]);
+	}
+}
+
+void Scene::render()
+{
+	int currx = Player->getPosition().x, curry = Player->getPosition().y;
+	int t = (currx + curry) % 2;
+	
+	for (int i = 0; i < 14; ++i)
+		for (int j = 0; j < 14; ++j) {
+			m_Renderer->DrawSolidRect(
+				-375 + 60 * i - 30 * t,
+				375 - 60 * j,
+				0, 30, 0.416f, 0.236f, 0.136f, 0.3, 0.9);
+			m_Renderer->DrawSolidRect(
+				-375 + 60 * i + 30 * t + 30,
+				375 - 60 * j + 30,
+				0, 30, 0.416f, 0.236f, 0.136f, 0.3, 0.9);
+		}
+	
+	list<Object*> plist = m_Players;
+
+	for (auto p : plist)
+	{
+		if (p == Player) {
+			m_Renderer->DrawTexturedRectSeq(
+				-15, 15, 0, PIECESIZE, 1, 1, 1, 1, ChessPiece,
+				p->getType(),
+				p->getTeam(),
+				6, 2, p->getPriority());
+		}
+
+		else {
+			m_Renderer->DrawTexturedRectSeq(
+				-345 + (11 + p->getPosition().x - currx) * 30,
+				345 - (11 + p->getPosition().y - curry) * 30,
+				0, PIECESIZE, 1, 1, 1, 1, ChessPiece,
+				p->getType(),
+	 			p->getTeam(),
+				6, 2, p->getPriority());
+		}
+	}
+
+
+	char buf[100];
+	sprintf(buf, "( %d, %d )", currx, curry);
+	m_Renderer->DrawTextW(0, 0, GLUT_BITMAP_HELVETICA_18, 0.5, 0, 0.5, buf);
+
+	for (int x = currx - 13; x < currx + 13; ++x) {
+		for (int y = curry - 13; y < curry + 13; ++y) {
+			if (x >= 0 && y >= 0 && x <= BOARD_WIDTH && y <= BOARD_HEIGHT)
+				if (x % 12 == 0 || y % 12 == 0) {
+					m_Renderer->DrawSolidRect(
+						-15 + 30 * (x - currx),
+						15 - 30 * (y - curry),
+						0, 30, 1, 0, 0, 0.5, 0.9
+					);
+					if (x % 12 == 0 && y % 12 == 0) {
+
+						sprintf(buf, "( %d, %d )", x, y);
+						m_Renderer->DrawTextW(-15 + 30 * (x - currx), 15 - 30 * (y - curry), GLUT_BITMAP_HELVETICA_18, 0.5, 0, 0.5, buf);
+					}
+				}
+		}
 	}
 }
