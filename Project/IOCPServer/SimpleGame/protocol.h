@@ -6,6 +6,7 @@
 
 #define BOARD_WIDTH		800
 #define BOARD_HEIGHT	800
+#define SPACESIZE		10
 
 #define VIEW_RADIUS		7
 
@@ -28,6 +29,9 @@
 #define SC_PUT_PLAYER		2
 #define SC_REMOVE_PLAYER	3
 #define SC_CHAT				4
+
+constexpr int SPACE_X = BOARD_WIDTH / SPACESIZE;
+constexpr int SPACE_Y = BOARD_HEIGHT / SPACESIZE;
 
 #pragma pack (push, 1)
 

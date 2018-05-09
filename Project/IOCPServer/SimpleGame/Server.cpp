@@ -60,7 +60,8 @@ void Server::InitServer()
 		Clientlist[i].y = rand() % BOARD_HEIGHT;
 		Clientlist[i].inUse = true;
 		Clientlist[i].bActive = false;
-		AddTimer(i, enumOperation::op_Move, MOVE_TIME);
+
+		m_Space[GetSpaceIndex(i)].insert(i);
 	}
 
 	TimerThread = thread{ [this]() { TimerThreadProcess(); } };
@@ -107,6 +108,8 @@ void Server::StartListen()
 		Clientlist[ClientKey].y = 4;
 		ZeroMemory(&Clientlist[ClientKey].OverlappedEx.wsaOverlapped, sizeof(WSAOVERLAPPED));
 
+		m_Space[GetSpaceIndex(ClientKey)].insert(ClientKey);
+
 		CreateIoCompletionPort(
 			reinterpret_cast<HANDLE*>(ClientAcceptSocket),
 			h_IOCP,
@@ -143,8 +146,8 @@ void Server::StartListen()
 		for (int i = 0; i < MAX_USER; ++i)
 		{
 			if (true == Clientlist[i].inUse) {
-				if (!CanSee(i, ClientKey))
-					continue;
+				if (!ChkInSpace(i, ClientKey))	continue;
+				if (!CanSee(i, ClientKey))		continue;
 
 				Clientlist[i].viewlist_mutex.lock();
 				Clientlist[i].viewlist.insert(ClientKey);
@@ -157,12 +160,12 @@ void Server::StartListen()
 		{
 			if (i != ClientKey && true == Clientlist[i].inUse)
 			{
-				if (!CanSee(ClientKey, i))
-					continue;
+				if (!ChkInSpace(i, ClientKey))	continue;
+				if (!CanSee(ClientKey, i))		continue;
 
-				Clientlist[i].viewlist_mutex.lock();
+				Clientlist[ClientKey].viewlist_mutex.lock();
 				Clientlist[ClientKey].viewlist.insert(i);
-				Clientlist[i].viewlist_mutex.unlock();
+				Clientlist[ClientKey].viewlist_mutex.unlock();
 
 				p.id = i;
 				p.x = Clientlist[i].x;
@@ -174,12 +177,18 @@ void Server::StartListen()
 
 		for (int i = NPC_START; i < NUM_OF_NPC; ++i)
 		{
-			if (!CanSee(ClientKey, i))
-				continue;
+			if (!ChkInSpace(i, ClientKey))	continue;
+			if (!CanSee(ClientKey, i))		continue;
+
+			Clientlist[ClientKey].viewlist_mutex.lock();
+			Clientlist[ClientKey].viewlist.insert(i);
+			Clientlist[ClientKey].viewlist_mutex.unlock();
 
 			Clientlist[i].viewlist_mutex.lock();
-			Clientlist[ClientKey].viewlist.insert(i);
-			Clientlist[i].bActive = true;
+			if (!Clientlist[i].bActive) {
+				Clientlist[i].bActive = true;
+				AddEvent(i, enumOperation::op_Move, MOVE_TIME);
+			}
 			Clientlist[i].viewlist_mutex.unlock();
 
 			p.id = i;
@@ -187,7 +196,6 @@ void Server::StartListen()
 			p.y = Clientlist[i].y;
 
 			SendPacket(ClientKey, &p);
-			//AddTimer(i, enumOperation::op_Move, MOVE_TIME);
 		}
 	}
 }
@@ -256,13 +264,13 @@ void Server::WorkThreadProcess(Server* server)
 		if (isSuccess == 0)
 		{
 			std::cout << "Client " << key << " Disconnected" << std::endl;
-			server->DisConnectClient(key);
+			server->DisConnectClient((int)key);
 			continue;
 		}
 		else if (datasize == 0 && key < NPC_START)
 		{
 			std::cout << "Client " << key << " Disconnected" << std::endl;
-			server->DisConnectClient(key);
+			server->DisConnectClient((int)key);
 			continue;
 		}
 
@@ -282,7 +290,7 @@ void Server::WorkThreadProcess(Server* server)
 				if (remainsize <= r_size) {
 					memcpy(cl->prev_packet + cl->prev_packetsize, ptr, remainsize);
 
-					server->m_pScene->ProcessPacket(key, cl->prev_packet);
+					server->m_pScene->ProcessPacket((int)key, cl->prev_packet);
 
 					r_size -= remainsize;
 					ptr += remainsize;
@@ -300,7 +308,7 @@ void Server::WorkThreadProcess(Server* server)
 			WSARecv(cl->Client_Sock, &oEx->wsaBuf, 1, NULL, &rFlag, &oEx->wsaOverlapped, NULL);
 		}
 		else if (oEx->eOperation == enumOperation::op_Move) {
-			server->MoveNPC(key);
+			server->MoveNPC((int)key);
 			delete oEx;
 		}
 		else
@@ -341,7 +349,7 @@ void Server::TimerThreadProcess()
 	}
 }
 
-void Server::AddTimer(UINT id, enumOperation op, long long time)
+void Server::AddEvent(UINT id, enumOperation op, long long time)
 {
 	sEvent e;
 	e.id = id;
@@ -402,6 +410,11 @@ void Server::DisConnectClient(int key)
 		else
 			Clientlist[id].viewlist_mutex.unlock();
 	}
+	
+	int spaceIdx = GetSpaceIndex(key);
+	m_SpaceMutex[spaceIdx].lock();
+	m_Space[spaceIdx].erase(key);
+	m_SpaceMutex[spaceIdx].unlock();
 
 	Clientlist[key].inUse = false;
 
@@ -410,12 +423,14 @@ void Server::DisConnectClient(int key)
 
 void Server::MoveNPC(int key)
 {
-	AddTimer(key, op_Move, MOVE_TIME);
+	//AddEvent(key, op_Move, MOVE_TIME);
 
 	if (Clientlist[key].bActive == false)
 		return;
 
- 	switch (rand() % 4) {
+	int oldSpaceIdx = GetSpaceIndex(key);
+
+	switch (rand() % 4) {
 	case 0:
 		if (Clientlist[key].x == BOARD_WIDTH)	break;
 		Clientlist[key].x++;					break;
@@ -428,6 +443,16 @@ void Server::MoveNPC(int key)
 	case 3:
 		if (Clientlist[key].y == 0)				break;
 		Clientlist[key].y--;					break;
+	}
+	int NewSpaceIdx = GetSpaceIndex(key);
+	if (oldSpaceIdx != NewSpaceIdx) {
+		m_SpaceMutex[oldSpaceIdx].lock();
+		m_Space[oldSpaceIdx].erase(key);
+		m_SpaceMutex[oldSpaceIdx].unlock();
+
+		m_SpaceMutex[NewSpaceIdx].lock();
+		m_Space[NewSpaceIdx].insert(key);
+		m_SpaceMutex[NewSpaceIdx].unlock();
 	}
 
 	std::unordered_set<int> new_view_list;
@@ -469,4 +494,5 @@ void Server::MoveNPC(int key)
 			SendPacket(id, &sp);
 		}
 	}
+	AddEvent(key, op_Move, MOVE_TIME);
 }

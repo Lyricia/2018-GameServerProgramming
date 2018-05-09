@@ -76,6 +76,9 @@ private:
 
 	Scene*			m_pScene = NULL;
 
+	std::mutex					m_SpaceMutex[SPACE_X * SPACE_Y];
+	std::unordered_set<int>		m_Space[SPACE_X * SPACE_Y];
+
 public:
 	Server();
 	~Server();
@@ -91,15 +94,32 @@ public:
 
 	ClientInfo& GetClient(int id) { return Clientlist[id]; }
 	ClientInfo* GetClientlist() { return Clientlist; }
-	void AddTimer(UINT id, enumOperation op, long long time);
+
+	void AddEvent(UINT id, enumOperation op, long long time);
 
 	long long GetTime();
 
 	bool CanSee(int a, int b);
-	void DisConnectClient(int id);
+	void DisConnectClient(int key);
 	void MoveNPC(int key);
+
+	std::unordered_set<int>& GetSpace(int idx) { return m_Space[idx];}
+	std::mutex& GetSpaceMutex(int id) { return m_SpaceMutex[GetSpaceIndex(id)]; }
+	int GetSpaceIndex(int id) {
+		return (Clientlist[id].x / SPACESIZE) + (Clientlist[id].y / SPACESIZE) * SPACE_X;
+	}
+
+	bool ChkInSpace(int clientid, int targetid) {
+		int clientspaceid = GetSpaceIndex(clientid);
+		int targetspaceid = GetSpaceIndex(targetid);
+		if ((clientspaceid + SPACE_X	- 1 <= targetspaceid) && (targetspaceid <= clientspaceid + SPACE_X	+ 1) ||
+			(clientspaceid				- 1 <= targetspaceid) && (targetspaceid <= clientspaceid			+ 1) ||
+			(clientspaceid - SPACE_X	- 1 <= targetspaceid) && (targetspaceid <= clientspaceid - SPACE_X	+ 1))
+			return true;
+			
+		return false;
+	}
 
 	static void WorkThreadProcess(Server* server);
 	void TimerThreadProcess();
 };
-

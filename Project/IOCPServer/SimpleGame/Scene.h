@@ -1,11 +1,11 @@
 #pragma once
-#include "Object.h"
 
 #define PIECESIZE 80
 #define INVALID -1
 
 class Timer;
 class Server;
+class Object;
 struct ClientInfo;
 
 class Scene
@@ -20,6 +20,7 @@ private:
 
 	Object*		m_Target = nullptr;
 	int			m_Board[BOARD_WIDTH][BOARD_HEIGHT] = {-1};
+
 
 	Server*			m_Server;
 	ClientInfo*		m_pClientlist;
@@ -40,8 +41,6 @@ public:
 
 	void ProcessPacket(int id, char* packet);
 
-	void RemovePlayerOnBoard(const int x, const int y) { 
-		m_Board[x][y] = INVALID;
-	}
+	void RemovePlayerOnBoard(const int x, const int y) { m_Board[x][y] = INVALID; }
 	void update();
 };
