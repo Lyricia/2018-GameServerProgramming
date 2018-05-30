@@ -313,9 +313,11 @@ void Scene::MoveObject(int clientid, int oldSpaceIdx)
 
 			m_Server->SendRemoveObject(clientid, id);
 
-			if (id >= NPC_START && m_pNPCList[id].bActive == true) 
+			if (id >= NPC_START) 
 			{
-				m_pNPCList[id].bActive = false;
+				if (m_pNPCList[id].bActive == true) {
+					m_pNPCList[id].bActive = false;
+				}
 			}
 			else
 			{

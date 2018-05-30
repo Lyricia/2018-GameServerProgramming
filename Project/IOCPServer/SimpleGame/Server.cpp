@@ -179,11 +179,8 @@ void Server::StartListen()
 		}
 
 		ClientArr[ClientKey].Client_Sock = ClientAcceptSocket;
-		ClientArr[ClientKey].x = 0;
-		ClientArr[ClientKey].y = 0;
 		ZeroMemory(&ClientArr[ClientKey].OverlappedEx.wsaOverlapped, sizeof(WSAOVERLAPPED));
 
-		m_Space[GetSpaceIndex(ClientKey)].insert(ClientKey);
 
 		CreateIoCompletionPort(
 			reinterpret_cast<HANDLE*>(ClientAcceptSocket),
@@ -413,114 +410,76 @@ void Server::WorkThreadProcess()
 
 		case enumOperation::db_login:
 		{
-			DBUserData* data = (DBUserData*)oEx->io_Buf;
-			if (data->nID != -1) {
-				sc_packet_loginok p;
-				p.size = sizeof(sc_packet_loginok);
-				p.type = SC_LOGINOK;
-				p.id = data->nID;
-				p.x = data->nPosX;
-				p.y = data->nPosY;
-				p.level = data->nCHAR_LEVEL;
-				p.hp = data->nHP;
-				p.exp = data->nExp;
-				SendPacket(data->Key, &p);
-
-				//Clientlist[data->Key].ID = data->nID;
-				//Clientlist[data->Key].x = data->nPosX;
-				//Clientlist[data->Key].y = data->nPosY;
-				//Clientlist[data->Key].bActive = true;
-				////Clientlist[data->Key].hp = data->nHP;
-				////Clientlist[data->Key].exp = data->nExp;
-				////Clientlist[data->Key].level = data->nCHAR_LEVEL;
-
-				ClientArr[data->Key].ID = data->nID;
-				ClientArr[data->Key].x = data->nPosX;
-				ClientArr[data->Key].y = data->nPosY;
-				ClientArr[data->Key].bActive = true;
-				//ClientArr[data->Key].hp = data->nHP;
-				//ClientArr[data->Key].exp = data->nExp;
-				//ClientArr[data->Key].level = data->nCHAR_LEVEL;
-			}
-			else {
-				sc_packet_loginfail p;
-				p.size = sizeof(sc_packet_loginfail);
-				p.type = SC_LOGINFAIL;
-				SendPacket(data->Key, &p);
-				break;
-			}
-
-			int ClientKey = data->Key;
-			sc_packet_put_player p;
-			p.id = ClientKey;
-			p.size = sizeof(sc_packet_put_player);
-			p.type = SC_PUT_PLAYER;
+			//DBUserData* data = (DBUserData*)oEx->io_Buf;
+			//if (data->nID != -1) {
+			//	sc_packet_loginok p;
+			//	p.size = sizeof(sc_packet_loginok);
+			//	p.type = SC_LOGINOK;
+			//	p.id = data->nID;
+			//	p.x = data->nPosX;
+			//	p.y = data->nPosY;
+			//	p.level = data->nCHAR_LEVEL;
+			//	p.hp = data->nHP;
+			//	p.exp = data->nExp;
+			//	SendPacket(data->Key, &p);
+			//
+			//	Clientlist[data->Key].ID = data->nID;
+			//	Clientlist[data->Key].x = data->nPosX;
+			//	Clientlist[data->Key].y = data->nPosY;
+			//	Clientlist[data->Key].bActive = true;
+			//	//Clientlist[data->Key].hp = data->nHP;
+			//	//Clientlist[data->Key].exp = data->nExp;
+			//	//Clientlist[data->Key].level = data->nCHAR_LEVEL;
+			//}
+			//else {
+			//	sc_packet_loginfail p;
+			//	p.size = sizeof(sc_packet_loginfail);
+			//	p.type = SC_LOGINFAIL;
+			//	SendPacket(data->Key, &p);
+			//	break;
+			//}
+			//
+			//int ClientKey = data->Key;
+			//sc_packet_put_player p;
+			//p.id = ClientKey;
+			//p.size = sizeof(sc_packet_put_player);
+			//p.type = SC_PUT_PLAYER;
 			//p.x = Clientlist[ClientKey].x;
 			//p.y = Clientlist[ClientKey].y;
-
-			p.x = ClientArr[ClientKey].x;
-			p.y = ClientArr[ClientKey].y;
-
-
-			// to all players
-			for (int i = 0; i < MAX_USER; ++i)
-			{
-				//if (true == Clientlist[i].inUse) {
-				//	if (!ChkInSpace(i, ClientKey))	continue;
-				//	if (!CanSee(i, ClientKey))		continue;
-				//
-				//	Clientlist[i].viewlist_mutex.lock();
-				//	Clientlist[i].viewlist.insert(ClientKey);
-				//	Clientlist[i].viewlist_mutex.unlock();
-				//	SendPacket(i, &p);
-				//}
-
-				if (true == ClientArr[i].inUse) {
-					if (!ChkInSpace(i, ClientKey))	continue;
-					if (!CanSee(i, ClientKey))		continue;
-
-					ClientArr[i].viewlist_mutex.lock();
-					ClientArr[i].viewlist.insert(ClientKey);
-					ClientArr[i].viewlist_mutex.unlock();
-					SendPacket(i, &p);
-				}
-			}
-			// to me
-			for (int i = 0; i < MAX_USER; ++i)
-			{
-				//if (i != ClientKey && true == Clientlist[i].inUse)
-				//{
-				//	if (!ChkInSpace(i, ClientKey))	continue;
-				//	if (!CanSee(ClientKey, i))		continue;
-				//
-				//	Clientlist[ClientKey].viewlist_mutex.lock();
-				//	Clientlist[ClientKey].viewlist.insert(i);
-				//	Clientlist[ClientKey].viewlist_mutex.unlock();
-				//
-				//	p.id = i;
-				//	p.x = Clientlist[i].x;
-				//	p.y = Clientlist[i].y;
-				//
-				//	SendPacket(ClientKey, &p);
-				//}
-
-				if (i != ClientKey && true == ClientArr[i].inUse)
-				{
-					if (!ChkInSpace(i, ClientKey))	continue;
-					if (!CanSee(ClientKey, i))		continue;
-
-					ClientArr[ClientKey].viewlist_mutex.lock();
-					ClientArr[ClientKey].viewlist.insert(i);
-					ClientArr[ClientKey].viewlist_mutex.unlock();
-
-					p.id = i;
-					p.x = ClientArr[i].x;
-					p.y = ClientArr[i].y;
-
-					SendPacket(ClientKey, &p);
-				}
-			}
-
+			//
+			//// to all players
+			//for (int i = 0; i < MAX_USER; ++i)
+			//{
+			//	if (true == Clientlist[i].inUse) {
+			//		if (!ChkInSpace(i, ClientKey))	continue;
+			//		if (!CanSee(i, ClientKey))		continue;
+			//	
+			//		Clientlist[i].viewlist_mutex.lock();
+			//		Clientlist[i].viewlist.insert(ClientKey);
+			//		Clientlist[i].viewlist_mutex.unlock();
+			//		SendPacket(i, &p);
+			//	}
+			//}
+			//// to me
+			//for (int i = 0; i < MAX_USER; ++i)
+			//{
+			//	if (i != ClientKey && true == Clientlist[i].inUse)
+			//	{
+			//		if (!ChkInSpace(i, ClientKey))	continue;
+			//		if (!CanSee(ClientKey, i))		continue;
+			//	
+			//		Clientlist[ClientKey].viewlist_mutex.lock();
+			//		Clientlist[ClientKey].viewlist.insert(i);
+			//		Clientlist[ClientKey].viewlist_mutex.unlock();
+			//	
+			//		p.id = i;
+			//		p.x = Clientlist[i].x;
+			//		p.y = Clientlist[i].y;
+			//	
+			//		SendPacket(ClientKey, &p);
+			//	}
+			//}
+			//
 			//for (int i = NPC_START; i < NUM_OF_NPC; ++i)
 			//{
 			//	if (!ChkInSpace(i, ClientKey))	continue;
@@ -543,17 +502,93 @@ void Server::WorkThreadProcess()
 			//
 			//	SendPacket(ClientKey, &p);
 			//}
+			//
+			//cout << "Client " << Clientlist[ClientKey].ID << " Connected\n";
+			//delete oEx;
+			//break;
 
+			DBUserData* data = (DBUserData*)oEx->io_Buf;
+			if (data->nID != -1) {
+				sc_packet_loginok p;
+				p.size = sizeof(sc_packet_loginok);
+				p.type = SC_LOGINOK;
+				p.id = data->nID;
+				p.x = data->nPosX;
+				p.y = data->nPosY;
+				p.level = data->nCHAR_LEVEL;
+				p.hp = data->nHP;
+				p.exp = data->nExp;
+				SendPacket(data->Key, &p);
+
+				ClientArr[data->Key].ID = data->nID;
+				ClientArr[data->Key].x = data->nPosX;
+				ClientArr[data->Key].y = data->nPosY;
+				ClientArr[data->Key].bActive = true;
+				//ClientArr[data->Key].hp = data->nHP;
+				//ClientArr[data->Key].exp = data->nExp;
+				//ClientArr[data->Key].level = data->nCHAR_LEVEL;
+
+				m_Space[GetSpaceIndex(data->Key)].insert(data->Key);
+			}
+			else {
+				sc_packet_loginfail p;
+				p.size = sizeof(sc_packet_loginfail);
+				p.type = SC_LOGINFAIL;
+				SendPacket(data->Key, &p);
+				break;
+			}
+
+			int ClientKey = data->Key;
+			sc_packet_put_player p;
+			p.id = ClientKey;
+			p.size = sizeof(sc_packet_put_player);
+			p.type = SC_PUT_PLAYER;
+
+			p.x = ClientArr[ClientKey].x;
+			p.y = ClientArr[ClientKey].y;
+
+
+			// to all players
+			for (int i = 0; i < MAX_USER; ++i)
+			{
+				if (true == ClientArr[i].inUse) {
+					if (!CanSee(i, ClientKey))		continue;
+
+					ClientArr[i].viewlist_mutex.lock();
+					ClientArr[i].viewlist.insert(ClientKey);
+					ClientArr[i].viewlist_mutex.unlock();
+					SendPacket(i, &p);
+				}
+			}
+			// to me
+			for (int i = 0; i < MAX_USER; ++i)
+			{
+				if (i != ClientKey && true == ClientArr[i].inUse)
+				{
+					if (!CanSee(ClientKey, i))		continue;
+
+					ClientArr[ClientKey].viewlist_mutex.lock();
+					ClientArr[ClientKey].viewlist.insert(i);
+					ClientArr[ClientKey].viewlist_mutex.unlock();
+
+					p.id = i;
+					p.x = ClientArr[i].x;
+					p.y = ClientArr[i].y;
+
+					SendPacket(ClientKey, &p);
+				}
+			}
+			
 			for (int i = NPC_START; i < NUM_OF_NPC; ++i)
 			{
-				if (!ChkInSpace(i, ClientKey))	continue;
+				if (!ChkInSpace(ClientKey, i))	continue;
 				if (!CanSee(ClientKey, i))		continue;
 
 				ClientArr[ClientKey].viewlist_mutex.lock();
 				ClientArr[ClientKey].viewlist.insert(i);
 				ClientArr[ClientKey].viewlist_mutex.unlock();
 
-				if (!NPCList[i].bActive) {
+				if (NPCList[i].bActive == false) {
 					NPCList[i].bActive = true;
 					AddTimerEvent(i, enumOperation::op_Move, MOVE_TIME);
 				}
@@ -564,9 +599,7 @@ void Server::WorkThreadProcess()
 
 				SendPacket(ClientKey, &p);
 			}
-		
 
-			//cout << "Client " << Clientlist[ClientKey].ID << " Connected\n";
 			cout << "Client " << ClientArr[ClientKey].ID << " Connected\n";
 			delete oEx;
 			break;
@@ -1034,5 +1067,9 @@ void Server::MoveNPC(int key)
 			SendPacket(id, &sp);
 		}
 	}
+
+	if (NPCList[key].bActive == false)
+		return;
+
 	AddTimerEvent(key, op_Move, MOVE_TIME);
 }

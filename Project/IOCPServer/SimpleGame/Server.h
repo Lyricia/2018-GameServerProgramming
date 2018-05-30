@@ -48,9 +48,6 @@ struct NPCInfo {
 class CObject{
 public:
 	int				ID = NULL;
-
-	std::unordered_set<int>	viewlist;
-	std::mutex				viewlist_mutex;
 };
 
 class CNPC :public CObject {
@@ -65,6 +62,9 @@ class CClient : public CNPC {
 public:
 	stOverlappedEx	OverlappedEx;
 	SOCKET			Client_Sock;
+
+	std::unordered_set<int>	viewlist;
+	std::mutex				viewlist_mutex;
 
 	int				packetsize;
 	int				prev_packetsize;
