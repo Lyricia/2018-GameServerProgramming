@@ -8,6 +8,9 @@ class Server;
 class Object;
 struct ClientInfo;
 
+class CClient;
+class CNPC;
+
 class Scene
 {
 private:
@@ -24,6 +27,9 @@ private:
 	Server*			m_Server;
 	ClientInfo*		m_pClientlist;
 
+	CClient*		m_pClientArr;
+	CNPC*			m_pNPCList;
+
 public:
 	Scene();
 	~Scene();
@@ -39,6 +45,7 @@ public:
 	void SetGamestatus(GAMESTATUS s) { GameStatus = s; }
 
 	void ProcessPacket(int id, char* packet);
+	void MoveObject(int clientid, int oldSpaceIdx);
 
 	void RemovePlayerOnBoard(const int x, const int y) { m_Board[x][y] = INVALID; }
 	void update();

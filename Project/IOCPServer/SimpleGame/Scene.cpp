@@ -17,7 +17,9 @@ Scene::~Scene()
 void Scene::buildScene()
 {
 	memset(m_Board, INVALID, sizeof(int) * BOARD_WIDTH * BOARD_HEIGHT);
-	m_pClientlist = m_Server->GetClientlist();
+	//m_pClientlist = m_Server->GetClientlist();
+	m_pClientArr = m_Server->GetClientArr();
+	m_pNPCList = m_Server->GetNPClist();
 
 	GameStatus = GAMESTATUS::RUNNING;
 }
@@ -39,7 +41,8 @@ void Scene::releaseScene()
 void Scene::ProcessPacket(int clientid, char * packet)
 {
 	int type = packet[1];
-	ClientInfo& client = m_Server->GetClient(clientid);
+	//ClientInfo& client = m_Server->GetClient(clientid);
+	CClient& client = m_Server->GetClient_(clientid);
 	int x = client.x, y = client.y;
 
 	int oldSpaceIdx = m_Server->GetSpaceIndex(clientid);
@@ -103,6 +106,124 @@ void Scene::ProcessPacket(int clientid, char * packet)
 		cout << "unknown protocol from client [" << clientid << "]" << endl;
 		return;
 	}
+	
+	MoveObject(clientid, oldSpaceIdx);
+	/*{
+		int newSpaceIdx = m_Server->GetSpaceIndex(clientid);
+		if (oldSpaceIdx != newSpaceIdx) {
+			m_Server->GetSpaceMutex(oldSpaceIdx).lock();
+			m_Server->GetSpace(oldSpaceIdx).erase(clientid);
+			m_Server->GetSpaceMutex(oldSpaceIdx).unlock();
+
+			m_Server->GetSpaceMutex(newSpaceIdx).lock();
+			m_Server->GetSpace(newSpaceIdx).insert(clientid);
+			m_Server->GetSpaceMutex(newSpaceIdx).unlock();
+		}
+
+		m_Board[client.x][client.y] = clientid;
+
+		sc_packet_pos sp;
+		sp.id = clientid;
+		sp.size = sizeof(sc_packet_pos);
+		sp.type = SC_POS;
+		sp.x = client.x;
+		sp.y = client.y;
+
+		// 새로 viewList에 들어오는 객체 처리
+		unordered_set<int> new_view_list;
+		int idx = 0;
+		for (int i = -1; i <= 1; ++i) {
+			for (int j = -1; j <= 1; ++j) {
+				idx = newSpaceIdx + i + (j * SPACE_X);
+				if (idx < 0 || idx >= SPACE_X * SPACE_Y) continue;
+
+				for (auto objidx : m_Server->GetSpace(idx))
+				{
+					if (objidx == clientid) continue;
+					if (m_pClientlist[objidx].inUse == false) continue;
+					if (m_Server->CanSee(clientid, objidx) == false) continue;
+					new_view_list.insert(objidx);
+				}
+			}
+		}
+
+		//for (int i = 0; i < NUM_OF_NPC; ++i) {
+		//	if (i == clientid) continue;
+		//	if (m_pClientlist[i].inUse == false) continue;
+		//	if (m_Server->CanSee(clientid, i) == false) continue;
+		//	new_view_list.insert(i);
+		//}
+
+		// viewList에 계속 남아있는 객체 처리
+		for (auto id : new_view_list) {
+			m_pClientlist[clientid].viewlist_mutex.lock();
+			if (m_pClientlist[clientid].viewlist.count(id) == 0) {
+				m_pClientlist[clientid].viewlist.insert(id);
+				m_pClientlist[clientid].viewlist_mutex.unlock();
+
+				m_Server->SendPutObject(clientid, id);
+			}
+			else {
+				m_pClientlist[clientid].viewlist_mutex.unlock();
+			}
+
+			m_pClientlist[id].viewlist_mutex.lock();
+			if (m_pClientlist[id].viewlist.count(clientid) == 0) {
+				m_pClientlist[id].viewlist.insert(clientid);
+				if (id >= NPC_START && !m_pClientlist[id].bActive) {
+					m_pClientlist[id].bActive = true;
+					m_Server->AddTimerEvent(id, enumOperation::op_Move, MOVE_TIME);
+				}
+				m_pClientlist[id].viewlist_mutex.unlock();
+
+				m_Server->SendPutObject(id, clientid);
+			}
+			else {
+				if (id >= NPC_START && !m_pClientlist[id].bActive) {
+					m_pClientlist[id].bActive = true;
+					m_Server->AddTimerEvent(id, enumOperation::op_Move, MOVE_TIME);
+				}
+				m_pClientlist[id].viewlist_mutex.unlock();
+				m_Server->SendPacket(id, &sp);
+			}
+		}
+
+		// 빠져나간 객체
+		m_pClientlist[clientid].viewlist_mutex.lock();
+		unordered_set<int> oldviewlist = m_pClientlist[clientid].viewlist;
+		m_pClientlist[clientid].viewlist_mutex.unlock();
+		for (auto id : oldviewlist) {
+			if (clientid == id)
+				continue;
+			if (new_view_list.count(id) == 0) {
+				m_pClientlist[clientid].viewlist_mutex.lock();
+				m_pClientlist[clientid].viewlist.erase(id);
+				m_pClientlist[clientid].bActive = false;
+				m_pClientlist[clientid].viewlist_mutex.unlock();
+
+				m_Server->SendRemoveObject(clientid, id);
+
+				m_pClientlist[id].viewlist_mutex.lock();
+				if (m_pClientlist[id].viewlist.count(clientid) != 0) {
+					m_pClientlist[id].viewlist.erase(clientid);
+					m_pClientlist[id].bActive = false;
+					m_pClientlist[id].viewlist_mutex.unlock();
+
+					m_Server->SendRemoveObject(id, clientid);
+				}
+				else
+					m_pClientlist[id].viewlist_mutex.unlock();
+			}
+		}
+
+		m_Server->SendPacket(clientid, &sp);
+	}*/
+}
+
+void Scene::MoveObject(int clientid, int oldSpaceIdx)
+{
+	//ClientInfo& client = m_Server->GetClient(clientid);
+	CClient& client = m_Server->GetClient_(clientid);
 
 	int newSpaceIdx = m_Server->GetSpaceIndex(clientid);
 	if (oldSpaceIdx != newSpaceIdx) {
@@ -135,79 +256,79 @@ void Scene::ProcessPacket(int clientid, char * packet)
 			for (auto objidx : m_Server->GetSpace(idx))
 			{
 				if (objidx == clientid) continue;
-				if (m_pClientlist[objidx].inUse == false) continue;
+				if (objidx < NPC_START && m_pClientArr[objidx].inUse == false) continue;
 				if (m_Server->CanSee(clientid, objidx) == false) continue;
 				new_view_list.insert(objidx);
 			}
 		}
 	}
 
-	//for (int i = 0; i < NUM_OF_NPC; ++i) {
-	//	if (i == clientid) continue;
-	//	if (m_pClientlist[i].inUse == false) continue;
-	//	if (m_Server->CanSee(clientid, i) == false) continue;
-	//	new_view_list.insert(i);
-	//}
-
 	// viewList에 계속 남아있는 객체 처리
 	for (auto id : new_view_list) {
-		m_pClientlist[clientid].viewlist_mutex.lock();
-		if (m_pClientlist[clientid].viewlist.count(id) == 0) {
-			m_pClientlist[clientid].viewlist.insert(id);
-			m_pClientlist[clientid].viewlist_mutex.unlock();
+		m_pClientArr[clientid].viewlist_mutex.lock();
+		if (m_pClientArr[clientid].viewlist.count(id) == 0) {
+			m_pClientArr[clientid].viewlist.insert(id);
+			m_pClientArr[clientid].viewlist_mutex.unlock();
 
 			m_Server->SendPutObject(clientid, id);
 		}
 		else {
-			m_pClientlist[clientid].viewlist_mutex.unlock();
+			m_pClientArr[clientid].viewlist_mutex.unlock();
 		}
 
-		m_pClientlist[id].viewlist_mutex.lock();
-		if (m_pClientlist[id].viewlist.count(clientid) == 0) {
-			m_pClientlist[id].viewlist.insert(clientid);
-			if (id >= NPC_START && !m_pClientlist[id].bActive) {
-				m_pClientlist[id].bActive = true;
+		if (id >= NPC_START)
+		{
+			if (m_pNPCList[id].bActive == false) {
+				m_pNPCList[id].bActive = true;
 				m_Server->AddTimerEvent(id, enumOperation::op_Move, MOVE_TIME);
 			}
-			m_pClientlist[id].viewlist_mutex.unlock();
-
-			m_Server->SendPutObject(id, clientid);
 		}
-		else {
-			if (id >= NPC_START && !m_pClientlist[id].bActive) {
-				m_pClientlist[id].bActive = true;
-				m_Server->AddTimerEvent(id, enumOperation::op_Move, MOVE_TIME);
+		else
+		{
+			m_pClientArr[id].viewlist_mutex.lock();
+			if (m_pClientArr[id].viewlist.count(clientid) == 0) {
+				m_pClientArr[id].viewlist.insert(clientid);
+				m_pClientArr[id].viewlist_mutex.unlock();
+
+				m_Server->SendPutObject(id, clientid);
 			}
-			m_pClientlist[id].viewlist_mutex.unlock();
-			m_Server->SendPacket(id, &sp);
+			else {
+				m_pClientArr[id].viewlist_mutex.unlock();
+				m_Server->SendPacket(id, &sp);
+			}
 		}
 	}
 
 	// 빠져나간 객체
-	m_pClientlist[clientid].viewlist_mutex.lock();
-	unordered_set<int> oldviewlist = m_pClientlist[clientid].viewlist;
-	m_pClientlist[clientid].viewlist_mutex.unlock();
+	m_pClientArr[clientid].viewlist_mutex.lock();
+	unordered_set<int> oldviewlist = m_pClientArr[clientid].viewlist;
+	m_pClientArr[clientid].viewlist_mutex.unlock();
 	for (auto id : oldviewlist) {
 		if (clientid == id)
 			continue;
 		if (new_view_list.count(id) == 0) {
-			m_pClientlist[clientid].viewlist_mutex.lock();
-			m_pClientlist[clientid].viewlist.erase(id);
-			m_pClientlist[clientid].bActive = false;
-			m_pClientlist[clientid].viewlist_mutex.unlock();
+			m_pClientArr[clientid].viewlist_mutex.lock();
+			m_pClientArr[clientid].viewlist.erase(id);
+			m_pClientArr[clientid].viewlist_mutex.unlock();
 
 			m_Server->SendRemoveObject(clientid, id);
 
-			m_pClientlist[id].viewlist_mutex.lock();
-			if (m_pClientlist[id].viewlist.count(clientid) != 0) {
-				m_pClientlist[id].viewlist.erase(clientid);
-				m_pClientlist[id].bActive = false;
-				m_pClientlist[id].viewlist_mutex.unlock();
-
-				m_Server->SendRemoveObject(id, clientid);
+			if (id >= NPC_START && m_pNPCList[id].bActive == true) 
+			{
+				m_pNPCList[id].bActive = false;
 			}
 			else
-				m_pClientlist[id].viewlist_mutex.unlock();
+			{
+				m_pClientArr[id].viewlist_mutex.lock();
+				if (m_pClientArr[id].viewlist.count(clientid) != 0) {
+					m_pClientArr[id].viewlist.erase(clientid);
+					m_pClientArr[id].viewlist_mutex.unlock();
+
+					m_Server->SendRemoveObject(id, clientid);
+				}
+				else
+					m_pClientArr[id].viewlist_mutex.unlock();
+			}
 		}
 	}
 

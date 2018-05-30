@@ -15,7 +15,7 @@
 #define MAX_USER		10
 
 #define NPC_START		100
-#define NUM_OF_NPC		101
+#define NUM_OF_NPC		50'100
 
 #define MAX_STR_SIZE	100
 #define MAX_NAME_LEN	50
