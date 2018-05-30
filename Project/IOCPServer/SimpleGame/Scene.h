@@ -21,7 +21,6 @@ private:
 	Object*		m_Target = nullptr;
 	int			m_Board[BOARD_WIDTH][BOARD_HEIGHT] = {-1};
 
-
 	Server*			m_Server;
 	ClientInfo*		m_pClientlist;
 

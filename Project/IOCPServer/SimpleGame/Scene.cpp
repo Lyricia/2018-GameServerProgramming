@@ -19,8 +19,6 @@ void Scene::buildScene()
 	memset(m_Board, INVALID, sizeof(int) * BOARD_WIDTH * BOARD_HEIGHT);
 	m_pClientlist = m_Server->GetClientlist();
 
-
-
 	GameStatus = GAMESTATUS::RUNNING;
 }
 
@@ -46,14 +44,14 @@ void Scene::ProcessPacket(int clientid, char * packet)
 
 	int oldSpaceIdx = m_Server->GetSpaceIndex(clientid);
 
-	switch (type) 
+	switch (type)
 	{
 	case CS_UP:
 		client.y--;
 		if (isCollide(client.x, client.y)) {
 			client.y++; break;
 		}
-		else 
+		else
 			m_Board[x][y] = INVALID;
 
 		if (0 > client.y)
@@ -65,7 +63,7 @@ void Scene::ProcessPacket(int clientid, char * packet)
 		if (isCollide(client.x, client.y)) {
 			client.y--; break;
 		}
-		else 
+		else
 			m_Board[x][y] = INVALID;
 
 		if (BOARD_HEIGHT <= client.y)
@@ -94,6 +92,13 @@ void Scene::ProcessPacket(int clientid, char * packet)
 		if (0 > client.x)
 			client.x = 0;
 		break;
+
+	case CS_LOGIN:
+	{
+		cs_packet_login * p = (cs_packet_login*)packet;
+		m_Server->AddDBEvent(clientid, p->id, db_login);
+		return;
+	}
 	default:
 		cout << "unknown protocol from client [" << clientid << "]" << endl;
 		return;
@@ -125,9 +130,9 @@ void Scene::ProcessPacket(int clientid, char * packet)
 	for (int i = -1; i <= 1; ++i) {
 		for (int j = -1; j <= 1; ++j) {
 			idx = newSpaceIdx + i + (j * SPACE_X);
-			if (idx < 0 || idx > SPACE_X*SPACE_Y) continue;
-	
-			for (auto objidx : m_Server->GetSpace(idx)) 
+			if (idx < 0 || idx >= SPACE_X * SPACE_Y) continue;
+
+			for (auto objidx : m_Server->GetSpace(idx))
 			{
 				if (objidx == clientid) continue;
 				if (m_pClientlist[objidx].inUse == false) continue;
@@ -162,7 +167,7 @@ void Scene::ProcessPacket(int clientid, char * packet)
 			m_pClientlist[id].viewlist.insert(clientid);
 			if (id >= NPC_START && !m_pClientlist[id].bActive) {
 				m_pClientlist[id].bActive = true;
-				m_Server->AddEvent(id, enumOperation::op_Move, MOVE_TIME);
+				m_Server->AddTimerEvent(id, enumOperation::op_Move, MOVE_TIME);
 			}
 			m_pClientlist[id].viewlist_mutex.unlock();
 
@@ -171,7 +176,7 @@ void Scene::ProcessPacket(int clientid, char * packet)
 		else {
 			if (id >= NPC_START && !m_pClientlist[id].bActive) {
 				m_pClientlist[id].bActive = true;
-				m_Server->AddEvent(id, enumOperation::op_Move, MOVE_TIME);
+				m_Server->AddTimerEvent(id, enumOperation::op_Move, MOVE_TIME);
 			}
 			m_pClientlist[id].viewlist_mutex.unlock();
 			m_Server->SendPacket(id, &sp);

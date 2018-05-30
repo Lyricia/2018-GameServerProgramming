@@ -14,7 +14,8 @@ enum MSGTYPE
 class Client
 {
 	WSADATA				wsa;
-	Scene*				pScene;
+	int					ClientID;
+	Scene*				pScene = nullptr;
 
 	SOCKET				Server_Sock;
 	SOCKADDR_IN			Server_Addr;

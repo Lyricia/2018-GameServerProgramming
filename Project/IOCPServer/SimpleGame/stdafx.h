@@ -14,7 +14,11 @@
 #include <map>
 #include <WS2tcpip.h>
 #include <unordered_set>
+#include <unordered_map>
 #include <queue>
+#include <locale>
+#include <iostream>
+#include <sqlext.h> 
 
 #include "Vector3D.h"
 #include "protocol.h"

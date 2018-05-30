@@ -2,6 +2,26 @@
 #include "Scene.h"
 #include "Server.h"
 
+void HandleDiagnosticRecord(SQLHANDLE hHandle, SQLSMALLINT hType, RETCODE RetCode)
+{
+	SQLSMALLINT iRec = 0;
+	SQLINTEGER  iError;
+	WCHAR       wszMessage[1000];
+	WCHAR       wszState[SQL_SQLSTATE_SIZE + 1];
+
+	if (RetCode == SQL_INVALID_HANDLE) {
+		fwprintf(stderr, L"Invalid handle!\n");
+		return;
+	}
+	while (SQLGetDiagRecW(hType, hHandle, ++iRec, wszState, &iError, wszMessage,
+		(SQLSMALLINT)(sizeof(wszMessage) / sizeof(WCHAR)), (SQLSMALLINT *)NULL) == SQL_SUCCESS) {
+		// Hide data truncated..
+		if (wcsncmp(wszState, L"01004", 5)) {
+			fwprintf(stderr, L"[%5.5s] %s (%d)\n", wszState, wszMessage, iError);
+		}
+	}
+}
+
 Server::Server()
 {
 }
@@ -12,6 +32,19 @@ Server::~Server()
 
 void Server::InitServer()
 {
+	setlocale(LC_ALL, "korean");
+	std::wcout.imbue(std::locale("korean"));
+
+	for (auto & client : ClientArr) {
+		client.OverlappedEx.eOperation = op_Recv;
+		client.OverlappedEx.wsaBuf.buf = client.OverlappedEx.io_Buf;
+		client.OverlappedEx.wsaBuf.len = sizeof(client.OverlappedEx.io_Buf);
+		client.inUse = false;
+		client.packetsize = 0;
+		client.prev_packetsize = 0;
+		client.ID = -1;
+	}
+
 	for (auto & client : Clientlist) {
 		client.OverlappedEx.eOperation = op_Recv;
 		client.OverlappedEx.wsaBuf.buf = client.OverlappedEx.io_Buf;
@@ -36,7 +69,7 @@ void Server::InitServer()
 	// ThreadPool
 	for (UINT i = 0; i < std::thread::hardware_concurrency(); i++)
 	{
-		WorkerThreads.emplace_back(std::thread{ WorkThreadProcess, this });
+		WorkerThreads.emplace_back(std::thread{ [this]() { WorkThreadProcess(); } });
 	}
 	
 	Listen_Sock = WSASocketW(AF_INET, SOCK_STREAM, 0, NULL, 0, WSA_FLAG_OVERLAPPED);
@@ -65,8 +98,35 @@ void Server::InitServer()
 	}
 
 	TimerThread = thread{ [this]() { TimerThreadProcess(); } };
+	DBThread = thread{ [this]() { DBThreadProcess(); } };
 
 	std::cout << "Server Initiated" << std::endl;
+
+	InitDB();
+}
+
+void Server::InitDB()
+{
+	SQLRETURN retcode;
+	retcode = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &h_env);
+	retcode = SQLSetEnvAttr(h_env, SQL_ATTR_ODBC_VERSION, (void*)SQL_OV_ODBC3, 0);
+	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
+		retcode = SQLAllocHandle(SQL_HANDLE_DBC, h_env, &h_dbc);
+
+		if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
+			SQLSetConnectAttr(h_dbc, SQL_LOGIN_TIMEOUT, (SQLPOINTER)5, 0);
+
+			retcode = SQLConnectW(h_dbc, (SQLWCHAR*)L"2018_ODBC", SQL_NTS, (SQLWCHAR*)NULL, 0, NULL, 0);
+
+			if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
+				retcode = SQLAllocHandle(SQL_HANDLE_STMT, h_dbc, &h_stmt);
+
+				DoTest();
+			}
+		}
+	}
+
+	cout << "Database Connected\n";
 }
 
 void Server::StartListen()
@@ -89,7 +149,7 @@ void Server::StartListen()
 		}
 		else
 			std::cout << "Client Accepted" << std::endl;
-		
+
 		int ClientKey = -1;
 		for (int i = 0; i < MAX_USER; ++i)
 		{
@@ -104,8 +164,8 @@ void Server::StartListen()
 		}
 
 		Clientlist[ClientKey].Client_Sock = ClientAcceptSocket;
-		Clientlist[ClientKey].x = 4;
-		Clientlist[ClientKey].y = 4;
+		Clientlist[ClientKey].x = 0;
+		Clientlist[ClientKey].y = 0;
 		ZeroMemory(&Clientlist[ClientKey].OverlappedEx.wsaOverlapped, sizeof(WSAOVERLAPPED));
 
 		m_Space[GetSpaceIndex(ClientKey)].insert(ClientKey);
@@ -117,9 +177,6 @@ void Server::StartListen()
 			0
 		);
 
-		printf("Client %d Connected\n", ClientKey);
-		
-		DWORD RecvByte = 0;
 		DWORD flag = 0;
 
 		Clientlist[ClientKey].inUse = true;
@@ -128,75 +185,12 @@ void Server::StartListen()
 		WSARecv(
 			Clientlist[ClientKey].Client_Sock,
 			&Clientlist[ClientKey].OverlappedEx.wsaBuf,
-			1, 
+			1,
 			NULL,
-			&flag, 
+			&flag,
 			&Clientlist[ClientKey].OverlappedEx.wsaOverlapped,
 			NULL
 		);
-
-
-		sc_packet_put_player p;
-		p.id = ClientKey;
-		p.size = sizeof(sc_packet_put_player);
-		p.type = SC_PUT_PLAYER;
-		p.x = Clientlist[ClientKey].x;
-		p.y = Clientlist[ClientKey].y;
-		// to all players
-		for (int i = 0; i < MAX_USER; ++i)
-		{
-			if (true == Clientlist[i].inUse) {
-				if (!ChkInSpace(i, ClientKey))	continue;
-				if (!CanSee(i, ClientKey))		continue;
-
-				Clientlist[i].viewlist_mutex.lock();
-				Clientlist[i].viewlist.insert(ClientKey);
-				Clientlist[i].viewlist_mutex.unlock();
-				SendPacket(i, &p);
-			}
-		}
-		// to me
-		for (int i = 0; i < MAX_USER; ++i)
-		{
-			if (i != ClientKey && true == Clientlist[i].inUse)
-			{
-				if (!ChkInSpace(i, ClientKey))	continue;
-				if (!CanSee(ClientKey, i))		continue;
-
-				Clientlist[ClientKey].viewlist_mutex.lock();
-				Clientlist[ClientKey].viewlist.insert(i);
-				Clientlist[ClientKey].viewlist_mutex.unlock();
-
-				p.id = i;
-				p.x = Clientlist[i].x;
-				p.y = Clientlist[i].y;
-
-				SendPacket(ClientKey, &p);
-			}
-		}
-
-		for (int i = NPC_START; i < NUM_OF_NPC; ++i)
-		{
-			if (!ChkInSpace(i, ClientKey))	continue;
-			if (!CanSee(ClientKey, i))		continue;
-
-			Clientlist[ClientKey].viewlist_mutex.lock();
-			Clientlist[ClientKey].viewlist.insert(i);
-			Clientlist[ClientKey].viewlist_mutex.unlock();
-
-			Clientlist[i].viewlist_mutex.lock();
-			if (!Clientlist[i].bActive) {
-				Clientlist[i].bActive = true;
-				AddEvent(i, enumOperation::op_Move, MOVE_TIME);
-			}
-			Clientlist[i].viewlist_mutex.unlock();
-
-			p.id = i;
-			p.x = Clientlist[i].x;
-			p.y = Clientlist[i].y;
-
-			SendPacket(ClientKey, &p);
-		}
 	}
 }
 
@@ -204,6 +198,13 @@ void Server::CloseServer()
 {
 	for (auto& t : WorkerThreads)
 		t.join();
+	TimerThread.join();
+	DBThread.join();
+
+	SQLFreeHandle(SQL_HANDLE_STMT, h_stmt);
+	SQLDisconnect(h_dbc);
+	SQLFreeHandle(SQL_HANDLE_DBC, h_dbc);
+	SQLFreeHandle(SQL_HANDLE_ENV, h_env);
 
 	closesocket(Listen_Sock);
 
@@ -245,7 +246,19 @@ void Server::SendRemoveObject(int client, int objid)
 	SendPacket(client, &p);
 }
 
-void Server::WorkThreadProcess(Server* server)
+bool Server::ChkInSpace(int clientid, int targetid)
+{
+	int clientspaceid = GetSpaceIndex(clientid);
+	int targetspaceid = GetSpaceIndex(targetid);
+	if ((clientspaceid + SPACE_X - 1	<= targetspaceid)	&& (targetspaceid <= clientspaceid + SPACE_X + 1) ||
+		(clientspaceid - 1				<= targetspaceid)	&& (targetspaceid <= clientspaceid + 1) ||
+		(clientspaceid - SPACE_X - 1	<= targetspaceid)	&& (targetspaceid <= clientspaceid - SPACE_X + 1))
+		return true;
+
+	return false;
+}
+
+void Server::WorkThreadProcess()
 {
 	unsigned long datasize;
 	unsigned long long key;
@@ -254,7 +267,7 @@ void Server::WorkThreadProcess(Server* server)
 	while (1)
 	{
 		bool isSuccess = GetQueuedCompletionStatus(
-			server->h_IOCP,
+			h_IOCP,
 			&datasize,
 			&key,
 			reinterpret_cast<LPOVERLAPPED*>(&oEx),
@@ -263,57 +276,164 @@ void Server::WorkThreadProcess(Server* server)
 
 		if (isSuccess == 0)
 		{
-			std::cout << "Client " << key << " Disconnected" << std::endl;
-			server->DisConnectClient((int)key);
+			DisConnectClient((int)key);
 			continue;
 		}
-		else if (datasize == 0 && key < NPC_START)
+		else if (datasize == 0 && key < NPC_START && (oEx->eOperation == op_Recv || oEx->eOperation == op_Send))
 		{
-			std::cout << "Client " << key << " Disconnected" << std::endl;
-			server->DisConnectClient((int)key);
+			DisConnectClient((int)key);
 			continue;
 		}
 
-		if (oEx->eOperation == enumOperation::op_Recv)
+		switch (oEx->eOperation) {
+		case enumOperation::op_Recv:
 		{
 			int r_size = datasize;
 			char* ptr = oEx->io_Buf;
-			ClientInfo* cl = &server->Clientlist[key];
-			
+			//ClientInfo* cl = &Clientlist[key];
+
 			while (0 < r_size)
 			{
-				if (cl->packetsize == 0)
-					cl->packetsize = ptr[0];
+				if (Clientlist[key].packetsize == 0)
+					Clientlist[key].packetsize = ptr[0];
 
-				int remainsize = cl->packetsize - cl->prev_packetsize;
+				int remainsize = Clientlist[key].packetsize - Clientlist[key].prev_packetsize;
 
 				if (remainsize <= r_size) {
-					memcpy(cl->prev_packet + cl->prev_packetsize, ptr, remainsize);
+					memcpy(Clientlist[key].prev_packet + Clientlist[key].prev_packetsize, ptr, remainsize);
 
-					server->m_pScene->ProcessPacket((int)key, cl->prev_packet);
+					m_pScene->ProcessPacket((int)key, Clientlist[key].prev_packet);
 
 					r_size -= remainsize;
 					ptr += remainsize;
-					cl->packetsize = 0;
-					cl->prev_packetsize = 0;
+					Clientlist[key].packetsize = 0;
+					Clientlist[key].prev_packetsize = 0;
 				}
 				else {
-					memcpy(cl->prev_packet + cl->prev_packetsize, ptr, r_size);
-					cl->prev_packetsize += r_size;
+					memcpy(Clientlist[key].prev_packet + Clientlist[key].prev_packetsize, ptr, r_size);
+					Clientlist[key].prev_packetsize += r_size;
 				}
 
 			}
 			unsigned long rFlag = 0;
 			ZeroMemory(&oEx->wsaOverlapped, sizeof(OVERLAPPED));
-			WSARecv(cl->Client_Sock, &oEx->wsaBuf, 1, NULL, &rFlag, &oEx->wsaOverlapped, NULL);
+			WSARecv(Clientlist[key].Client_Sock, &oEx->wsaBuf, 1, NULL, &rFlag, &oEx->wsaOverlapped, NULL);
+			break;
 		}
-		else if (oEx->eOperation == enumOperation::op_Move) {
-			server->MoveNPC((int)key);
+		case enumOperation::op_Move:
+		{
+			MoveNPC((int)key);
 			delete oEx;
+			break;
 		}
-		else
+
+		case enumOperation::db_login:
+		{
+			DBUserData* data = (DBUserData*)oEx->io_Buf;
+			if (data->nID != -1) {
+				sc_packet_loginok p;
+				p.size = sizeof(sc_packet_loginok);
+				p.type = SC_LOGINOK;
+				p.id = data->nID;
+				p.x = data->nPosX;
+				p.y = data->nPosY;
+				p.level = data->nCHAR_LEVEL;
+				p.hp = data->nHP;
+				p.exp = data->nExp;
+				SendPacket(data->Key, &p);
+
+				Clientlist[data->Key].ID = data->nID;
+				Clientlist[data->Key].x = data->nPosX;
+				Clientlist[data->Key].y = data->nPosY;
+				Clientlist[data->Key].bActive = true;
+				//Clientlist[data->Key].hp = data->nHP;
+				//Clientlist[data->Key].exp = data->nExp;
+				//Clientlist[data->Key].level = data->nCHAR_LEVEL;
+			}
+			else {
+				sc_packet_loginfail p;
+				p.size = sizeof(sc_packet_loginfail);
+				p.type = SC_LOGINFAIL;
+				SendPacket(data->Key, &p);
+				break;
+			}
+
+			int ClientKey = data->Key;
+			sc_packet_put_player p;
+			p.id = ClientKey;
+			p.size = sizeof(sc_packet_put_player);
+			p.type = SC_PUT_PLAYER;
+			p.x = Clientlist[ClientKey].x;
+			p.y = Clientlist[ClientKey].y;
+			// to all players
+			for (int i = 0; i < MAX_USER; ++i)
+			{
+				if (true == Clientlist[i].inUse) {
+					if (!ChkInSpace(i, ClientKey))	continue;
+					if (!CanSee(i, ClientKey))		continue;
+
+					Clientlist[i].viewlist_mutex.lock();
+					Clientlist[i].viewlist.insert(ClientKey);
+					Clientlist[i].viewlist_mutex.unlock();
+					SendPacket(i, &p);
+				}
+			}
+			// to me
+			for (int i = 0; i < MAX_USER; ++i)
+			{
+				if (i != ClientKey && true == Clientlist[i].inUse)
+				{
+					if (!ChkInSpace(i, ClientKey))	continue;
+					if (!CanSee(ClientKey, i))		continue;
+
+					Clientlist[ClientKey].viewlist_mutex.lock();
+					Clientlist[ClientKey].viewlist.insert(i);
+					Clientlist[ClientKey].viewlist_mutex.unlock();
+
+					p.id = i;
+					p.x = Clientlist[i].x;
+					p.y = Clientlist[i].y;
+
+					SendPacket(ClientKey, &p);
+				}
+			}
+
+			for (int i = NPC_START; i < NUM_OF_NPC; ++i)
+			{
+				if (!ChkInSpace(i, ClientKey))	continue;
+				if (!CanSee(ClientKey, i))		continue;
+
+				Clientlist[ClientKey].viewlist_mutex.lock();
+				Clientlist[ClientKey].viewlist.insert(i);
+				Clientlist[ClientKey].viewlist_mutex.unlock();
+
+				Clientlist[i].viewlist_mutex.lock();
+				if (!Clientlist[i].bActive) {
+					Clientlist[i].bActive = true;
+					AddTimerEvent(i, enumOperation::op_Move, MOVE_TIME);
+				}
+				Clientlist[i].viewlist_mutex.unlock();
+
+				p.id = i;
+				p.x = Clientlist[i].x;
+				p.y = Clientlist[i].y;
+
+				SendPacket(ClientKey, &p);
+			}
+
+			cout << "Client " << Clientlist[ClientKey].ID << " Connected\n";
+			delete oEx;
+			break;
+		}
+
+		case enumOperation::db_logout:
 		{
 			delete oEx;
+			break;
+		}
+		default:
+			delete oEx;
+			break;
 		}
 	}
 }
@@ -323,25 +443,25 @@ void Server::TimerThreadProcess()
 	while (true) {
 		Sleep(1);
 		while (true) {
-			EventMutex.lock();
-			if (EventQueue.empty()) {
-				EventMutex.unlock();
+			TimerEventMutex.lock();
+			if (TimerEventQueue.empty()) {
+				TimerEventMutex.unlock();
 				break;
 			}
 			
-			sEvent e = EventQueue.top();
+			sEvent e = TimerEventQueue.top();
 			if (e.startTime > GetTime()) {
-				EventMutex.unlock();
+				TimerEventMutex.unlock();
 				break;
 			}
 			
-			EventQueue.pop();
-			EventMutex.unlock();
+			TimerEventQueue.pop();
+			TimerEventMutex.unlock();
 
 			if (e.operation == enumOperation::op_Move)
 			{
 				stOverlappedEx* o = new stOverlappedEx();
-				o->eOperation = op_Move;
+				o->eOperation = e.operation;
 				
 				PostQueuedCompletionStatus(h_IOCP, 0, e.id, reinterpret_cast<LPOVERLAPPED>(o));
 			}
@@ -349,16 +469,148 @@ void Server::TimerThreadProcess()
 	}
 }
 
-void Server::AddEvent(UINT id, enumOperation op, long long time)
+void Server::DBThreadProcess()
+{
+	while (true) {
+		Sleep(1);
+		while (true) {
+			DBEventMutex.lock();
+			if (DBEventQueue.empty()) {
+				DBEventMutex.unlock();
+				break;
+			}
+
+			sEvent e = DBEventQueue.front();
+
+			DBEventQueue.pop();
+			DBEventMutex.unlock();
+
+			if (e.operation == enumOperation::db_login)
+			{
+				stOverlappedEx* o = new stOverlappedEx();
+				o->eOperation = e.operation;
+				DBUserData* data = (DBUserData*)o->io_Buf;
+				data->Key = e.IOCPKey;
+				SQLLEN cbID = 0, cbCHAR_LEVEL = 0, cbPosX = 0, cbPosY = 0, cbhp = 0, cbexp = 0;
+
+				SQLRETURN retcode = SQLAllocHandle(SQL_HANDLE_STMT, h_dbc, &h_stmt);
+				retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC LoginProc " + std::to_wstring(e.id)).c_str(), SQL_NTS);
+				if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
+					retcode = SQLBindCol(h_stmt, 1, SQL_C_LONG, &data->nID, sizeof(SQLINTEGER), &cbID);
+					retcode = SQLBindCol(h_stmt, 2, SQL_C_LONG, &data->nCHAR_LEVEL, sizeof(SQLINTEGER), &cbCHAR_LEVEL);
+					retcode = SQLBindCol(h_stmt, 3, SQL_C_LONG, &data->nPosX, sizeof(SQLINTEGER), &cbPosX);
+					retcode = SQLBindCol(h_stmt, 4, SQL_C_LONG, &data->nPosY, sizeof(SQLINTEGER), &cbPosY);
+					retcode = SQLBindCol(h_stmt, 5, SQL_C_LONG, &data->nHP, sizeof(SQLINTEGER), &cbhp);
+					retcode = SQLBindCol(h_stmt, 6, SQL_C_LONG, &data->nExp, sizeof(SQLINTEGER), &cbexp);
+
+					retcode = SQLFetch(h_stmt);
+					if (retcode == SQL_ERROR || retcode == SQL_SUCCESS_WITH_INFO) {
+						data->nID = -1;
+						cout << "Error2 " << retcode << " \n";
+					}
+					if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
+						wprintf(L"%d\t %d\t %d\t %d\n", data->nID, data->nCHAR_LEVEL, data->nPosX, data->nPosY);
+					}
+					else {
+						data->nID = -1;
+						cout << "NO DB. LogIn Failed\n";
+					}
+				}
+				else {
+					HandleDiagnosticRecord(h_stmt, SQL_HANDLE_STMT, retcode);
+				}
+
+				SQLCancel(h_stmt);
+				PostQueuedCompletionStatus(h_IOCP, 0, e.id, reinterpret_cast<LPOVERLAPPED>(o));
+			}
+			else if (e.operation == enumOperation::db_logout)
+			{
+				stOverlappedEx* o = new stOverlappedEx();
+				o->eOperation = e.operation;
+				DBUserData* cl = (DBUserData*)e.data;
+
+				SQLRETURN retcode = SQLAllocHandle(SQL_HANDLE_STMT, h_dbc, &h_stmt);
+
+				std::wstring query = 
+					L"EXEC LogoutProc " + 
+					std::to_wstring(cl->nID) + L", " +
+					std::to_wstring(cl->nPosX) + L", " +
+					std::to_wstring(cl->nPosY);
+				
+				retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)query.c_str(), SQL_NTS);
+				cout << "Client " << cl->nID << " LogOut\n";
+
+				SQLCancel(h_stmt);
+				PostQueuedCompletionStatus(h_IOCP, 0, e.id, reinterpret_cast<LPOVERLAPPED>(o));
+
+				delete e.data;
+			}
+		}
+	}
+
+}
+
+void Server::DoTest()
+{
+	SQLINTEGER nID, nCHAR_LEVEL, nPosX, nPosY;
+	SQLLEN cbName = 0, cbID = 0, cbCHAR_LEVEL = 0, cbPosX = 0, cbPosY = 0;
+	
+	SQLRETURN retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC loginProc " + std::to_wstring(1)).c_str(), SQL_NTS);
+	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
+
+		// Bind columns 1, 2, and 3  
+		retcode = SQLBindCol(h_stmt, 1, SQL_C_LONG, &nID, 100, &cbID);
+		retcode = SQLBindCol(h_stmt, 2, SQL_C_LONG, &nCHAR_LEVEL, 100, &cbCHAR_LEVEL);
+		retcode = SQLBindCol(h_stmt, 3, SQL_C_LONG, &nPosX, 100, &cbPosX);
+		retcode = SQLBindCol(h_stmt, 4, SQL_C_LONG, &nPosY, 100, &cbPosY);
+
+		// Fetch and print each row of data. On an error, display a message and exit.  
+		for (int i = 0; ; i++) {
+			retcode = SQLFetch(h_stmt);
+			if (retcode == SQL_ERROR || retcode == SQL_SUCCESS_WITH_INFO) {
+				cout << "Error2 " << retcode << " \n";
+			}
+			if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO)
+				wprintf(L"%d\t: %d\t %d\t %d\t %d\n", i + 1, nID, nCHAR_LEVEL, nPosX, nPosY);
+			else {
+				cout << "DB End\n";
+				break;
+			}
+		}
+	}
+	else {
+		HandleDiagnosticRecord(h_stmt, SQL_HANDLE_STMT, retcode);
+	}
+	SQLCancel(h_stmt);
+}
+
+void Server::AddTimerEvent(UINT id, enumOperation op, long long time)
 {
 	sEvent e;
 	e.id = id;
 	e.operation = op;
 	e.startTime = GetTime() + time;
 
-	EventMutex.lock();
-	EventQueue.push(e);
-	EventMutex.unlock();
+	TimerEventMutex.lock();
+	TimerEventQueue.push(e);
+	TimerEventMutex.unlock();
+}
+
+void Server::AddDBEvent(UINT IOCPKey, UINT id, enumOperation op)
+{
+	sEvent e;
+	e.id = id;
+	e.operation = op;
+	e.IOCPKey = IOCPKey;
+	DBUserData* data = new DBUserData();
+	data->nPosX = Clientlist[IOCPKey].x;
+	data->nPosY = Clientlist[IOCPKey].y;
+	data->nID = Clientlist[IOCPKey].ID;
+	e.data = data;
+
+	DBEventMutex.lock();
+	DBEventQueue.push(e);
+	DBEventMutex.unlock();
 }
 
 long long Server::GetTime()
@@ -382,6 +634,12 @@ bool Server::CanSee(int a, int b)
 void Server::DisConnectClient(int key)
 {
 	closesocket(Clientlist[key].Client_Sock);
+
+	if (Clientlist[key].bActive)
+		AddDBEvent(key, Clientlist[key].ID, db_logout);
+	else
+		return;
+
 
 	sc_packet_remove_player p;
 	p.id = key;
@@ -410,21 +668,20 @@ void Server::DisConnectClient(int key)
 		else
 			Clientlist[id].viewlist_mutex.unlock();
 	}
-	
+
 	int spaceIdx = GetSpaceIndex(key);
 	m_SpaceMutex[spaceIdx].lock();
 	m_Space[spaceIdx].erase(key);
 	m_SpaceMutex[spaceIdx].unlock();
-
-	Clientlist[key].inUse = false;
-
 	m_pScene->RemovePlayerOnBoard(Clientlist[key].x, Clientlist[key].y);
+
+	std::cout << "Client " << Clientlist[key].ID << " Disconnected" << std::endl;
+	Clientlist[key].inUse = false;
+	Clientlist[key].bActive = false;
 }
 
 void Server::MoveNPC(int key)
 {
-	//AddEvent(key, op_Move, MOVE_TIME);
-
 	if (Clientlist[key].bActive == false)
 		return;
 
@@ -494,5 +751,5 @@ void Server::MoveNPC(int key)
 			SendPacket(id, &sp);
 		}
 	}
-	AddEvent(key, op_Move, MOVE_TIME);
+	AddTimerEvent(key, op_Move, MOVE_TIME);
 }

@@ -15,25 +15,39 @@
 #define MAX_USER		10
 
 #define NPC_START		100
-#define NUM_OF_NPC		200'100
+#define NUM_OF_NPC		101
 
 #define MAX_STR_SIZE	100
+#define MAX_NAME_LEN	50
 
-#define CS_UP			1
-#define CS_DOWN			2
-#define CS_LEFT			3
-#define CS_RIGHT		4
-#define CS_CHAT			5
+#define CS_LOGIN		1
+#define CS_LOGOUT		2
 
-#define SC_POS				1
-#define SC_PUT_PLAYER		2
-#define SC_REMOVE_PLAYER	3
+#define CS_UP			3
+#define CS_DOWN			4
+#define CS_LEFT			5
+#define CS_RIGHT		6
+
+#define CS_CHAT			7
+
+#define SC_LOGINOK			1
+#define SC_LOGINFAIL		2
+#define SC_POS				3
 #define SC_CHAT				4
+#define SC_STAT_CHANGE		5
+#define SC_REMOVE_PLAYER	6
+#define SC_PUT_PLAYER		7
 
 constexpr int SPACE_X = BOARD_WIDTH / SPACESIZE;
 constexpr int SPACE_Y = BOARD_HEIGHT / SPACESIZE;
 
 #pragma pack (push, 1)
+
+struct cs_packet_login {
+	BYTE size;
+	BYTE type;
+	WORD id;
+};
 
 struct cs_packet_up {
 	BYTE size;
@@ -61,6 +75,22 @@ struct cs_packet_chat {
 	WCHAR message[MAX_STR_SIZE];
 };
 
+struct sc_packet_loginok {
+	BYTE size;
+	BYTE type;
+	WORD id;
+	WORD x;
+	WORD y;
+	WORD hp;
+	BYTE level;
+	DWORD exp;
+};
+
+struct sc_packet_loginfail {
+	BYTE size;
+	BYTE type;
+};
+
 struct sc_packet_pos {
 	BYTE size;
 	BYTE type;
@@ -76,6 +106,7 @@ struct sc_packet_put_player {
 	SHORT x;
 	SHORT y;
 };
+
 struct sc_packet_remove_player {
 	BYTE size;
 	BYTE type;
@@ -88,5 +119,4 @@ struct sc_packet_chat {
 	WORD id;
 	WCHAR message[MAX_STR_SIZE];
 };
-
 #pragma pack (pop)

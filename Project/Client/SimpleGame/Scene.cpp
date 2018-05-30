@@ -28,7 +28,7 @@ void Scene::buildScene()
 	memset(m_Board, -1, sizeof(int) * BOARD_WIDTH * BOARD_HEIGHT);
 	ChessPiece = m_Renderer->CreatePngTexture("Assets/Image/chess piece.png");
 
-	GameStatus = GAMESTATUS::RUNNING;
+	GameStatus = GAMESTATUS::STOP;
 }
 
 void Scene::releaseScene()
@@ -124,6 +124,18 @@ void Scene::ProcessPacket(char * p)
 {
 	switch (p[1])
 	{
+	case SC_LOGINOK:
+	{
+		cout << "OK" << endl;
+		GameStatus = GAMESTATUS::RUNNING;
+		break;
+	}
+	case SC_LOGINFAIL:
+	{
+		cout << "Failed" << endl;
+		system("pause");
+		exit(0);
+	}
 	case SC_PUT_PLAYER:
 	{
 		sc_packet_put_player *my_packet = reinterpret_cast<sc_packet_put_player *>(p);
@@ -163,7 +175,6 @@ void Scene::ProcessPacket(char * p)
 				m_Board[my_packet->x][my_packet->y] = my_packet->id;
 			}
 		}
-
 		break;
 	}
 
@@ -188,9 +199,13 @@ void Scene::ProcessPacket(char * p)
 
 void Scene::render()
 {
-	int currx = Player->getPosition().x, curry = Player->getPosition().y;
+	int currx = 0, curry = 0;
+	if(Player!= nullptr)
+		currx = Player->getPosition().x, curry = Player->getPosition().y;
+
 	int t = (currx + curry) % 2;
 	
+	// Checker Board
 	for (int i = 0; i < 14; ++i)
 		for (int j = 0; j < 14; ++j) {
 			m_Renderer->DrawSolidRect(
@@ -203,8 +218,8 @@ void Scene::render()
 				0, 30, 0.416f, 0.236f, 0.136f, 0.3, 0.9);
 		}
 	
+	// Player Objects
 	list<Object*> plist = m_Players;
-
 	for (auto p : plist)
 	{
 		if (p == Player) {
@@ -226,22 +241,22 @@ void Scene::render()
 		}
 	}
 
-
+	// Board Line, Point Coord
 	char buf[100];
 	sprintf(buf, "( %d, %d )", currx, curry);
 	m_Renderer->DrawTextW(0, 0, GLUT_BITMAP_HELVETICA_18, 0.5, 0, 0.5, buf);
 
-	for (int x = currx - 13; x < currx + 13; ++x) {
-		for (int y = curry - 13; y < curry + 13; ++y) {
+	for (int x = currx - 16; x < currx + 16; ++x) {
+		for (int y = curry - 16; y < curry + 16; ++y) {
 			if (x >= 0 && y >= 0 && x <= BOARD_WIDTH && y <= BOARD_HEIGHT)
-				if (x % 12 == 0 || y % 12 == 0) {
+				if (x % 10 == 0 || y % 10 == 0) {
 					m_Renderer->DrawSolidRect(
 						-15 + 30 * (x - currx),
 						15 - 30 * (y - curry),
 						0, 30, 1, 0, 0, 0.5, 0.9
 					);
-					if (x % 12 == 0 && y % 12 == 0) {
 
+					if (x % 10 == 0 && y % 10 == 0) {
 						sprintf(buf, "( %d, %d )", x, y);
 						m_Renderer->DrawTextW(-15 + 30 * (x - currx), 15 - 30 * (y - curry), GLUT_BITMAP_HELVETICA_18, 0.5, 0, 0.5, buf);
 					}

@@ -49,6 +49,15 @@ void Client::InitClient()
 	hWsaEvent = WSACreateEvent();
 	WSAEventSelect(Server_Sock, hWsaEvent, FD_CLOSE | FD_READ);
 	recvThread = thread{ [&]() { CompletePacket(); } };
+
+	std::cout << "Enter ID : ";
+	std::cin >> ClientID;
+
+	cs_packet_login p;
+	p.size = sizeof(cs_packet_login);
+	p.type = CS_LOGIN;
+	p.id = ClientID;
+	SendPacket((char*)&p);
 }
 
 void Client::StartClient()
@@ -103,7 +112,8 @@ void Client::CompletePacket()
 				{
 					memcpy(packet_buffer + saved_packet_size, ptr, in_packet_size - saved_packet_size);
 
-					pScene->ProcessPacket(packet_buffer);
+					if (pScene != nullptr)
+						pScene->ProcessPacket(packet_buffer);
 
 					ptr += in_packet_size - saved_packet_size;
 					iobyte -= in_packet_size - saved_packet_size;
