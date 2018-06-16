@@ -20,7 +20,9 @@ private:
 	Client*				m_Client;
 	int					m_Board[BOARD_WIDTH][BOARD_HEIGHT] = {};
 
-	list<Object*>		m_Players;
+	unordered_map<UINT, Object*>	m_Player_ID_Matcher;
+	list<Object*>					m_Players;
+
 	Object*				Player = nullptr;
 
 public:
@@ -44,5 +46,5 @@ public:
 	void render();
 
 	void ProcessPacket(char* p);
-
+	void ReadGroundFile();
 };

@@ -26,6 +26,7 @@ public:
 	void DrawParticle(float x, float y, float z, float size, float r, float g, float b, float a, float gDirX, float gDirY, GLuint texID, float timeInSeconds, float level);
 	void DrawParticleClimate(float x, float y, float z, float size, float r, float g, float b, float a, float gDirX, float gDirY, GLuint texID, float timeInSeconds, float level);
 	void DrawText(float x, float y, void* font, float r, float g, float b, char* text);
+	void DrawTextW(float x, float y, void* font, float r, float g, float b, WCHAR* text);
 	void SetSceneTransform(float x, float y, float scaleX, float scaleY);
 
 	unsigned char * loadBMPRaw(const char * imagepath, unsigned int& outWidth, unsigned int& outHeight, bool flipY);

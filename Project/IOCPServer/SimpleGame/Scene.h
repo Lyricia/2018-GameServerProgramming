@@ -44,9 +44,10 @@ public:
 	GAMESTATUS GetGamestatus() { return GameStatus; }
 	void SetGamestatus(GAMESTATUS s) { GameStatus = s; }
 
-	void ProcessPacket(int id, char* packet);
+	void ProcessPacket(int id, unsigned char* packet);
 	void MoveObject(int clientid, int oldSpaceIdx);
 
 	void RemovePlayerOnBoard(const int x, const int y) { m_Board[x][y] = INVALID; }
 	void update();
+	void ReadGroundPos();
 };

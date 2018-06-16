@@ -27,7 +27,7 @@ void Scene::buildScene()
 	
 	memset(m_Board, -1, sizeof(int) * BOARD_WIDTH * BOARD_HEIGHT);
 	ChessPiece = m_Renderer->CreatePngTexture("Assets/Image/chess piece.png");
-
+	ReadGroundFile();
 	GameStatus = GAMESTATUS::STOP;
 }
 
@@ -55,24 +55,28 @@ void Scene::keyinput(unsigned char key)
 		break;
 
 	case 'w':
+	case 'W':
 		my_packet->size = sizeof(my_packet);
 		my_packet->type = CS_UP;
 		m_Client->SendPacket((char*)my_packet);
 		break;
 
 	case 'a':
+	case 'A':
 		my_packet->size = sizeof(my_packet);
 		my_packet->type = CS_LEFT;
 		m_Client->SendPacket((char*)my_packet);
 		break;
 
 	case 's':
+	case 'S':
 		my_packet->size = sizeof(my_packet);
 		my_packet->type = CS_DOWN;
 		m_Client->SendPacket((char*)my_packet);
 		break;
 
 	case 'd':
+	case 'D':
 		my_packet->size = sizeof(my_packet);
 		my_packet->type = CS_RIGHT;
 		m_Client->SendPacket((char*)my_packet);
@@ -104,19 +108,25 @@ void Scene::mouseinput(int button, int state, int x, int y)
 
 void Scene::update()
 {
+	g_Timer->getTimeset();
+	double timeElapsed = g_Timer->getTimeElapsed();
 	if (GameStatus == GAMESTATUS::RUNNING) 
 	{
+		for (auto& p : m_Players) {
+			float time = p->getMsgTimer();
+			if (time > 0) {
+				p->setMsgTimer(time - timeElapsed);
+			}
+			else if (time < 0) {
+				p->setChatMsg(L"");
+			}
+		}
 	}
 	else if (GameStatus == GAMESTATUS::PAUSE)
 	{
-		g_Timer->getTimeset();
-		double timeElapsed = g_Timer->getTimeElapsed();
 	}
-
 	else
 	{
-		g_Timer->getTimeset();
-		double timeElapsed = g_Timer->getTimeElapsed();
 	}
 }
 
@@ -161,6 +171,7 @@ void Scene::ProcessPacket(char * p)
 			}
 		}
 		m_Players.push_back(cl);
+		m_Player_ID_Matcher[my_packet->id] = cl;
 		m_Board[my_packet->x][my_packet->y] = my_packet->id;
 		break;
 	}
@@ -191,9 +202,38 @@ void Scene::ProcessPacket(char * p)
 		});
 		break;
 	}
+	case SC_CHAT: 
+	{
+		sc_packet_chat *my_packet = reinterpret_cast<sc_packet_chat *>(p);
+		m_Player_ID_Matcher[my_packet->id]->setChatMsg(my_packet->message);
+		m_Player_ID_Matcher[my_packet->id]->setMsgTimer(5.f);
+		break;
+	}
 
 	default:
 		printf("Unknown PACKET type [%d]\n", p[1]);
+	}
+}
+
+struct pos {
+	int x, y;
+};
+
+void Scene::ReadGroundFile()
+{
+	int nStride = sizeof(pos);
+	int nVerts = 0;
+
+	std::string Filepath = "./Assets/Ground.pos";
+	FILE* fp = nullptr;
+	fopen_s(&fp, Filepath.c_str(), "rb");
+	fread_s(&nVerts, sizeof(UINT), sizeof(UINT), 1, fp);
+	pos* pVerts = new pos[nVerts];
+	fread_s(pVerts, nStride * nVerts, nStride, nVerts, fp);
+
+	for (int i = 0; i < nVerts; ++i) {
+		m_Board[pVerts[i].x][pVerts[i].y] = 1;
+		//cout << (int)pVerts[i].x << ", " << (int)pVerts[i].y << "\n";
 	}
 }
 
@@ -236,19 +276,36 @@ void Scene::render()
 				345 - (11 + p->getPosition().y - curry) * 30,
 				0, PIECESIZE, 1, 1, 1, 1, ChessPiece,
 				p->getType(),
-	 			p->getTeam(),
+				p->getTeam(),
 				6, 2, p->getPriority());
+		}
+		if (p->getMsgTimer() > 0) {
+			m_Renderer->DrawTextW(
+				-345 + (11 + p->getPosition().x - currx) * 30,
+				345 - (11 + p->getPosition().y - curry) * 30 - 20,
+				GLUT_BITMAP_HELVETICA_18, 0.5f, 0.5f, 0.2f, p->getChatMsg());
+		}
+	}
+
+	for (int i = 0; i < BOARD_WIDTH; ++i) {
+		for (int j = 0; j < BOARD_HEIGHT; ++j) {
+			if (m_Board[i][j] == 1) {
+				m_Renderer->DrawSolidRect(
+					-345 + (11 + i - currx) * 30,
+					345 - (11 + j - curry) * 30,
+					0, 30, 0, 0, 0, 1, 0.1);
+			}
 		}
 	}
 
 	// Board Line, Point Coord
-	char buf[100];
+	char buf[50];
 	sprintf(buf, "( %d, %d )", currx, curry);
 	m_Renderer->DrawTextW(0, 0, GLUT_BITMAP_HELVETICA_18, 0.5, 0, 0.5, buf);
 
 	for (int x = currx - 16; x < currx + 16; ++x) {
 		for (int y = curry - 16; y < curry + 16; ++y) {
-			if (x >= 0 && y >= 0 && x <= BOARD_WIDTH && y <= BOARD_HEIGHT)
+			if (x >= 0 && y >= 0 && x <= BOARD_WIDTH && y <= BOARD_HEIGHT) {
 				if (x % 10 == 0 || y % 10 == 0) {
 					m_Renderer->DrawSolidRect(
 						-15 + 30 * (x - currx),
@@ -258,9 +315,10 @@ void Scene::render()
 
 					if (x % 10 == 0 && y % 10 == 0) {
 						sprintf(buf, "( %d, %d )", x, y);
-						m_Renderer->DrawTextW(-15 + 30 * (x - currx), 15 - 30 * (y - curry), GLUT_BITMAP_HELVETICA_18, 0.5, 0, 0.5, buf);
+						m_Renderer->DrawText(-15 + 30 * (x - currx), 15 - 30 * (y - curry), GLUT_BITMAP_HELVETICA_12, 0.2, 0, 0.8, buf);
 					}
 				}
+			}
 		}
 	}
 }

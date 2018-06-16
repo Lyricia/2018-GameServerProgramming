@@ -12,9 +12,12 @@
 #include <chrono>
 #include <vector>
 #include <thread>
+#include <string>
 #include <list>
 #include <mutex>
+#include <unordered_map>
 
+#include <comdef.h>
 
 #include "Dependencies\glew.h"
 #include "Dependencies\freeglut.h"

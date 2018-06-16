@@ -1118,7 +1118,22 @@ void Renderer::DrawText(float x, float y, void* font, float r, float g, float b,
 	glWindowPos2i(x+m_WindowSizeX/2, y+m_WindowSizeY/2);
 	glColor3f(r, g, b);
 	glBindTexture(GL_TEXTURE_2D, 0);
-	glutBitmapString(GLUT_BITMAP_HELVETICA_10, (unsigned char*)text);
+	glutBitmapString(font, (unsigned char*)text);
+}
+
+void Renderer::DrawTextW(float x, float y, void* font, float r, float g, float b, WCHAR* text)
+{
+	_bstr_t str(text);
+	char* c = str;
+
+	glUseProgram(0);
+	glDisable(GL_LIGHTING);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	glWindowPos2i(x + m_WindowSizeX / 2, y + m_WindowSizeY / 2);
+	glColor3f(r, g, b);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glutBitmapString(font, (unsigned char*)c);
 }
 
 void Renderer::GetGLPosition(float x, float y, float *newX, float *newY)

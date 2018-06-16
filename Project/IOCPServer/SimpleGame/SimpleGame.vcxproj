@@ -156,6 +156,12 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="LuaCAPI.h" />
+    <ClInclude Include="Lua\lauxlib.h" />
+    <ClInclude Include="Lua\lua.h" />
+    <ClInclude Include="Lua\lua.hpp" />
+    <ClInclude Include="Lua\luaconf.h" />
+    <ClInclude Include="Lua\lualib.h" />
     <ClInclude Include="mdump.h" />
     <ClInclude Include="Object.h" />
     <ClInclude Include="protocol.h" />
@@ -179,6 +185,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Timer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Lua\Monster.lua" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

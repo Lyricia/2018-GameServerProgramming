@@ -11,6 +11,11 @@ void Object::releaseObject()
 {
 }
 
+void Object::setChatMsg(WCHAR * msg)
+{
+	wcsncpy_s(m_Message, msg, MAX_STR_SIZE);
+}
+
 void Object::move(DIR dir)
 {
 	switch (dir)

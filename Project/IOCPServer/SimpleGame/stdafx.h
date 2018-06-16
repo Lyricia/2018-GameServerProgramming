@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <tchar.h>
 #include <chrono>
+#include <fstream>
 #include <vector>
 #include <thread>
 #include <list>
@@ -20,9 +21,17 @@
 #include <iostream>
 #include <sqlext.h> 
 
+
 #include "Vector3D.h"
 #include "protocol.h"
 
+extern "C" {
+#include "Lua\lua.h"
+#include "Lua\lauxlib.h"
+#include "Lua\lualib.h"
+}
+
+#pragma comment(lib, "Lua/lua53.lib")
 #pragma comment(lib, "ws2_32")
 
 #define EPSILON			0.00001f
@@ -51,15 +60,3 @@ inline Vector3D<int> Vec3f_to_Vec3i(Vector3D<float>& fvec)
 {
 	return Vector3D<int>{ static_cast<int>(fvec.x), static_cast<int>(fvec.y), static_cast<int>(fvec.z) };
 }
-
-/*
-  1 2 3 4 5 6 7 8
-1
-2		B
-3
-4
-5
-6
-7		W
-8
-*/

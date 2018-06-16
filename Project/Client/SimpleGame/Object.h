@@ -16,6 +16,9 @@ protected:
 	Vector3D<float>		m_Position;
 	int					m_Team;
 	float				m_Priority;
+	WCHAR				m_Message[MAX_STR_SIZE] = {};
+	float				m_MsgTimer = 0.f;
+
 
 public:
 	Object();
@@ -25,6 +28,8 @@ public:
 
 	Vector3D<float>	getPosition() { return m_Position; }
 
+	void setMsgTimer(float t) { m_MsgTimer = t; }
+	void setChatMsg(WCHAR * msg);
 	void setPosition(float x, float y, float z) { m_Position = { x, y, z }; }
 	void setPosition(Vector3D<float> pos) { m_Position = pos; }
 	void setPosition(Vector3D<int> pos) { m_Position = {pos.x, pos.y, pos.z}; }
@@ -35,10 +40,13 @@ public:
 
 	void move(DIR dir);
 	
-	OBJTYPE getType() { return m_type; }
-	int getTeam() { return m_Team; }
-	const int getID() { return m_id; }
-	const float getPriority() { return m_Priority; }
+	
+	OBJTYPE				getType() { return m_type; }
+	int					getTeam() { return m_Team; }
+	const int			getID() { return m_id; }
+	const float			getPriority() { return m_Priority; }
+	const float			getMsgTimer() { return m_MsgTimer; }
+	WCHAR*				getChatMsg() { return m_Message; }
 
 	virtual void update(const double timeElapsed) {}
 	virtual void render(Renderer* renderer, int texID = NULL) {}

@@ -35,15 +35,6 @@ int main(int argc, char **argv)
 	Initialize();
 	MainServer->StartListen();
 
-	//while (!MainServer->IsReady());
-	//
-	//Initialize();
-	//
-	//while (1)
-	//{
-	//	CurrentScene->update();
-	//}
-
 	CurrentScene->releaseScene();
 
 	MainServer->CloseServer();

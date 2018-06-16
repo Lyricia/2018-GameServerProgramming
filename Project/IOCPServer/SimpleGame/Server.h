@@ -11,7 +11,14 @@ enum MSGTYPE
 
 enum enumOperation {
 	op_Send, op_Recv, op_Move,
-	db_login, db_logout
+	db_login, db_logout,
+	npc_player_move, npc_bye
+};
+
+enum ServerOperationMode {
+	MODE_NORMAL = 1,
+	MODE_TEST_NORMAL,
+	MODE_TEST_HOTSPOT
 };
 
 struct stOverlappedEx 
@@ -19,7 +26,8 @@ struct stOverlappedEx
 	WSAOVERLAPPED	wsaOverlapped;
 	WSABUF			wsaBuf;
 	char			io_Buf[MAX_BUFF_SIZE];
-	enumOperation	eOperation; 
+	enumOperation	eOperation;
+	int				EventTarget;
 };
 
 struct ClientInfo
@@ -32,17 +40,11 @@ struct ClientInfo
 	bool			bActive;
 	int				packetsize;
 	int				prev_packetsize;
-	char			prev_packet[MAX_PACKET_SIZE];
+	unsigned char	prev_packet[MAX_PACKET_SIZE];
 	SHORT			x, y;
 
 	std::unordered_set<int>	viewlist;
-	std::mutex				viewlist_mutex;
-};
-
-struct NPCInfo {
-	int				ID = NULL;
-	SHORT			x, y;
-	bool			inUse;
+	std::mutex				dviewlist_mutex;
 };
 
 class CObject{
@@ -56,6 +58,7 @@ public:
 	bool			bActive;
 
 	SHORT			x, y;
+	lua_State*		L;
 };
 
 class CClient : public CNPC {
@@ -68,7 +71,7 @@ public:
 
 	int				packetsize;
 	int				prev_packetsize;
-	char			prev_packet[MAX_PACKET_SIZE];
+	unsigned char	prev_packet[MAX_PACKET_SIZE];
 };
 
 struct sEvent 
@@ -100,6 +103,8 @@ struct DBUserData {
 class Server
 {
 private:
+	int					Mode;
+
 	WSADATA				wsa;
 	SOCKET				Listen_Sock;
 	SOCKADDR_IN			Server_Addr;
@@ -108,8 +113,6 @@ private:
 	SQLHENV				h_env;
 	SQLHDBC				h_dbc;
 	SQLHSTMT			h_stmt = 0;
-
-	//ClientInfo			Clientlist[NUM_OF_NPC];
 
 	CNPC				NPCList[NUM_OF_NPC];
 	CClient				ClientArr[MAX_USER];
@@ -143,20 +146,19 @@ public:
 	void StartListen();
 	void CloseServer();
 	void RegisterScene(Scene* scene) { m_pScene = scene; }
+	void CreateConnection(UINT clientkey);
 
 	void SendPacket(int clientkey, void* packet);
 	void SendPutObject(int client, int objid);
 	void SendRemoveObject(int client, int objid);
+	void SendChatPacket(int to, int from, WCHAR * message);
+	void SendChatToAll(int from, WCHAR * message);
 
-	//ClientInfo& GetClient(int id) { return Clientlist[id]; }
-	//ClientInfo* GetClientlist() { return Clientlist; }
-
-
-	CClient& GetClient_(int id) { return ClientArr[id]; }
+	CClient& GetClient(int id) { return ClientArr[id]; }
 	CClient* GetClientArr() { return ClientArr; }
 	CNPC& GetNPC(int id) { return NPCList[id]; }
 	CNPC* GetNPClist() { return NPCList; }
-
+	HANDLE GetIOCP() { return h_IOCP; }
 
 
 	void AddTimerEvent(UINT id, enumOperation op, long long time);
@@ -174,8 +176,11 @@ public:
 		CNPC* obj = nullptr;
 		if (id >= NPC_START)		obj = &NPCList[id];
 		else if (id < NPC_START)	obj = &ClientArr[id];
-		return (obj->x / SPACESIZE) + (obj->y / SPACESIZE) * SPACE_X;
-		//return (Clientlist[id].x / SPACESIZE) + (Clientlist[id].y / SPACESIZE) * SPACE_X;
+		int res =  (obj->x / SPACESIZE) + (obj->y / SPACESIZE) * SPACE_X;
+		if (res > 1600) {
+			int a = 0;
+		}
+		return res;
 	}
 
 	bool ChkInSpace(int clientid, int targetid);
@@ -185,4 +190,5 @@ public:
 	void DBThreadProcess();
 
 	void DoTest();
+	void ReadServerGround();
 };

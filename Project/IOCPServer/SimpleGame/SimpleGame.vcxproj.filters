@@ -25,6 +25,12 @@
     <Filter Include="Timer">
       <UniqueIdentifier>{1f362843-0082-40ee-a19d-855becccb3b2}</UniqueIdentifier>
     </Filter>
+    <Filter Include="헤더 파일\Lua">
+      <UniqueIdentifier>{b34b9cda-eb75-4a4f-a57e-fccfb861a747}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="리소스 파일\Lua">
+      <UniqueIdentifier>{0611e4df-add8-42ed-933f-9c9f71789cbd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
@@ -57,6 +63,24 @@
     <ClInclude Include="protocol.h">
       <Filter>Server</Filter>
     </ClInclude>
+    <ClInclude Include="Lua\lauxlib.h">
+      <Filter>헤더 파일\Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lua.h">
+      <Filter>헤더 파일\Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lua.hpp">
+      <Filter>헤더 파일\Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\luaconf.h">
+      <Filter>헤더 파일\Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lualib.h">
+      <Filter>헤더 파일\Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaCAPI.h">
+      <Filter>헤더 파일\Lua</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -80,5 +104,10 @@
     <ClCompile Include="Timer.cpp">
       <Filter>Timer</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Lua\Monster.lua">
+      <Filter>리소스 파일\Lua</Filter>
+    </None>
   </ItemGroup>
 </Project>
