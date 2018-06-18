@@ -28,8 +28,6 @@ void DisplayLuaError(lua_State* L, int error) {
 	lua_pop(L, 1);
 }
 
-
-
 Server::Server()
 {
 }
@@ -162,12 +160,15 @@ void Server::InitObjectList()
 		lua_pushnumber(L, NPCList[i].x);
 		lua_pushnumber(L, NPCList[i].y);
 		error = lua_pcall(L, 2, 0, 0);
-		
 		lua_pop(L, 1);
+
 		lua_register(L, "API_sendMessage", CAPI_sendMessage);
 		lua_register(L, "API_get_x", CAPI_get_x);
 		lua_register(L, "API_get_y", CAPI_get_y);
 		lua_register(L, "API_MoveNPC", CAPI_Server_MoveNPC);
+		lua_register(L, "API_get_dist", CAPI_get_Dist);
+		lua_register(L, "API_Attack_Player", CAPI_Attack_Player);
+		lua_register(L, "API_get_playeractive", CAPI_get_playeractive);
 
 		NPCList[i].L = L;
 	}
@@ -277,7 +278,11 @@ void Server::SendPutObject(int client, int objid)
 	sc_packet_put_player p;
 	p.id = objid;
 	p.size = sizeof(p);
-	p.type = SC_PUT_PLAYER;
+	p.type = SC_ADD_OBJECT;
+	if (objid < NPC_START)
+		p.ObjType = ObjType::Player;
+	else
+		p.ObjType = NPCList[objid].ObjectType;
 
 	CNPC* obj = nullptr;
 	if (objid >= NPC_START)		obj = &NPCList[objid];
@@ -293,7 +298,7 @@ void Server::SendRemoveObject(int client, int objid)
 	sc_packet_remove_player p;
 	p.id = objid;
 	p.size = sizeof(p);
-	p.type = SC_REMOVE_PLAYER;
+	p.type = SC_REMOVE_OBJECT;
 
 	SendPacket(client, &p);
 }
@@ -401,7 +406,9 @@ void Server::WorkThreadProcess()
 		{
 			if (NPCList[key].bActive == true) {
 				lua_getglobal(NPCList[key].L, "Event_MoveNPC");
-				lua_pcall(NPCList[key].L, 0, 0, 0);
+				int error = lua_pcall(NPCList[key].L, 0, 0, 0);
+				if (error != 0)
+					DisplayLuaError(NPCList[key].L, error);
 			}
 			delete oEx;
 			break;
@@ -425,6 +432,10 @@ void Server::WorkThreadProcess()
 				ClientArr[data->Key].ID = data->nID;
 				ClientArr[data->Key].x = data->nPosX;
 				ClientArr[data->Key].y = data->nPosY;
+				ClientArr[data->Key].hp = data->nHP;
+				ClientArr[data->Key].level = data->nCHAR_LEVEL;
+				ClientArr[data->Key].exp = data->nExp;
+				wcsncpy_s(ClientArr[data->Key].UserName, (WCHAR*)data->nName, 10);
 				ClientArr[data->Key].bActive = true;
 			}
 			else {
@@ -466,6 +477,12 @@ void Server::WorkThreadProcess()
 			delete oEx;
 			break;
 		}
+		case enumOperation::npc_respawn:
+		{
+			cout << key << " npc respawn\n";
+			delete oEx;
+			break;
+		}
 
 		default:
 			delete oEx;
@@ -479,8 +496,8 @@ void Server::CreateConnection(UINT ClientKey)
 	sc_packet_put_player p;
 	p.id = ClientKey;
 	p.size = sizeof(sc_packet_put_player);
-	p.type = SC_PUT_PLAYER;
-
+	p.type = SC_ADD_OBJECT;
+	p.ObjType = ObjType::Player;
 	p.x = ClientArr[ClientKey].x;
 	p.y = ClientArr[ClientKey].y;
 
@@ -520,7 +537,7 @@ void Server::CreateConnection(UINT ClientKey)
 	{
 		if (!ChkInSpace(ClientKey, i))	continue;
 		if (!CanSee(ClientKey, i))		continue;
-
+		 
 		ClientArr[ClientKey].viewlist_mutex.lock();
 		ClientArr[ClientKey].viewlist.insert(i);
 		ClientArr[ClientKey].viewlist_mutex.unlock();
@@ -533,6 +550,7 @@ void Server::CreateConnection(UINT ClientKey)
 		p.id = i;
 		p.x = NPCList[i].x;
 		p.y = NPCList[i].y;
+		p.ObjType = NPCList[i].ObjectType;
 
 		SendPacket(ClientKey, &p);
 	}
@@ -554,7 +572,7 @@ void Server::TimerThreadProcess()
 			}
 			
 			sEvent e = TimerEventQueue.top();
-			if (e.startTime > GetTime()) {
+			if (e.startTime > GetSystemTime()) {
 				TimerEventMutex.unlock();
 				break;
 			}
@@ -595,10 +613,12 @@ void Server::DBThreadProcess()
 				o->eOperation = e.operation;
 				DBUserData* data = (DBUserData*)o->io_Buf;
 				data->Key = e.IOCPKey;
-				SQLLEN cbID = 0, cbCHAR_LEVEL = 0, cbPosX = 0, cbPosY = 0, cbhp = 0, cbexp = 0;
+				SQLLEN cbID = 0, cbCHAR_LEVEL = 0, cbPosX = 0, cbPosY = 0, cbhp = 0, cbexp = 0, cbName = 0;
 
 				SQLRETURN retcode = SQLAllocHandle(SQL_HANDLE_STMT, h_dbc, &h_stmt);
-				retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC LoginProc " + std::to_wstring(e.id)).c_str(), SQL_NTS);
+				//retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC LoginProc " + std::to_wstring(e.id)).c_str(), SQL_NTS);
+				retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC LoginByName " + std::wstring((WCHAR*)e.data)).c_str(), SQL_NTS);
+
 				if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
 					retcode = SQLBindCol(h_stmt, 1, SQL_C_LONG, &data->nID, sizeof(SQLINTEGER), &cbID);
 					retcode = SQLBindCol(h_stmt, 2, SQL_C_LONG, &data->nCHAR_LEVEL, sizeof(SQLINTEGER), &cbCHAR_LEVEL);
@@ -606,6 +626,7 @@ void Server::DBThreadProcess()
 					retcode = SQLBindCol(h_stmt, 4, SQL_C_LONG, &data->nPosY, sizeof(SQLINTEGER), &cbPosY);
 					retcode = SQLBindCol(h_stmt, 5, SQL_C_LONG, &data->nHP, sizeof(SQLINTEGER), &cbhp);
 					retcode = SQLBindCol(h_stmt, 6, SQL_C_LONG, &data->nExp, sizeof(SQLINTEGER), &cbexp);
+					retcode = SQLBindCol(h_stmt, 7, SQL_C_WCHAR, &data->nName, MAX_NAME_LEN, &cbName);
 
 					retcode = SQLFetch(h_stmt);
 					if (retcode == SQL_ERROR || retcode == SQL_SUCCESS_WITH_INFO) {
@@ -613,7 +634,7 @@ void Server::DBThreadProcess()
 						cout << "Error2 " << retcode << " \n";
 					}
 					if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
-						wprintf(L"%d\t %d\t %d\t %d\n", data->nID, data->nCHAR_LEVEL, data->nPosX, data->nPosY);
+						wprintf(L"%d\t %d\t %d\t %d\t %s\n", data->nID, data->nCHAR_LEVEL, data->nPosX, data->nPosY, data->nName);
 					}
 					else {
 						data->nID = -1;
@@ -635,11 +656,14 @@ void Server::DBThreadProcess()
 
 				SQLRETURN retcode = SQLAllocHandle(SQL_HANDLE_STMT, h_dbc, &h_stmt);
 
-				std::wstring query = 
-					L"EXEC LogoutProc " + 
+				std::wstring query =
+					L"EXEC LogoutProc " +
 					std::to_wstring(cl->nID) + L", " +
 					std::to_wstring(cl->nPosX) + L", " +
-					std::to_wstring(cl->nPosY);
+					std::to_wstring(cl->nPosY) + L", " +
+					std::to_wstring(cl->nExp) + L", " +
+					std::to_wstring(cl->nCHAR_LEVEL) + L", " +
+					std::to_wstring(cl->nHP);
 				
 				retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)query.c_str(), SQL_NTS);
 				cout << "Client " << cl->nID << " LogOut\n";
@@ -656,10 +680,12 @@ void Server::DBThreadProcess()
 
 void Server::DoTest()
 {
-	SQLINTEGER nID, nCHAR_LEVEL, nPosX, nPosY;
-	SQLLEN cbName = 0, cbID = 0, cbCHAR_LEVEL = 0, cbPosX = 0, cbPosY = 0;
+	SQLINTEGER nID, nCHAR_LEVEL, nPosX, nPosY, nHP, nExp;
+	SQLWCHAR nName[10];
+	SQLLEN cbID = 0, cbCHAR_LEVEL = 0, cbPosX = 0, cbPosY = 0, cbhp = 0, cbexp = 0, cbName = 0;
 	
-	SQLRETURN retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC loginProc " + std::to_wstring(1)).c_str(), SQL_NTS);
+	//SQLRETURN retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC loginProc " + std::to_wstring(1)).c_str(), SQL_NTS);
+	SQLRETURN retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC LoginByName " + std::wstring(L"test")).c_str(), SQL_NTS);
 	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
 
 		// Bind columns 1, 2, and 3  
@@ -668,6 +694,11 @@ void Server::DoTest()
 		retcode = SQLBindCol(h_stmt, 3, SQL_C_LONG, &nPosX, 100, &cbPosX);
 		retcode = SQLBindCol(h_stmt, 4, SQL_C_LONG, &nPosY, 100, &cbPosY);
 
+		retcode = SQLBindCol(h_stmt, 5, SQL_C_LONG, &nHP, sizeof(SQLINTEGER), &cbhp);
+		retcode = SQLBindCol(h_stmt, 6, SQL_C_LONG, &nExp, sizeof(SQLINTEGER), &cbexp);
+		retcode = SQLBindCol(h_stmt, 7, SQL_C_WCHAR, &nName, 10, &cbName);
+
+
 		// Fetch and print each row of data. On an error, display a message and exit.  
 		for (int i = 0; ; i++) {
 			retcode = SQLFetch(h_stmt);
@@ -675,7 +706,7 @@ void Server::DoTest()
 				cout << "Error2 " << retcode << " \n";
 			}
 			if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO)
-				wprintf(L"%d\t: %d\t %d\t %d\t %d\n", i + 1, nID, nCHAR_LEVEL, nPosX, nPosY);
+				wprintf(L"%d\t: %d\t %d\t %d\t %d\t %s\n", i + 1, nID, nCHAR_LEVEL, nPosX, nPosY, nName);
 			else {
 				cout << "DB End\n";
 				break;
@@ -753,7 +784,7 @@ void Server::AddTimerEvent(UINT id, enumOperation op, long long time)
 	sEvent e;
 	e.id = id;
 	e.operation = op;
-	e.startTime = GetTime() + time;
+	e.startTime = GetSystemTime() + time;
 
 	TimerEventMutex.lock();
 	TimerEventQueue.push(e);
@@ -771,6 +802,9 @@ void Server::AddDBEvent(UINT IOCPKey, UINT id, enumOperation op)
 	data->nPosX = ClientArr[IOCPKey].x;
 	data->nPosY = ClientArr[IOCPKey].y;
 	data->nID = ClientArr[IOCPKey].ID;
+	data->nCHAR_LEVEL = ClientArr[IOCPKey].level;
+	data->nHP = ClientArr[IOCPKey].hp;
+	data->nExp = ClientArr[IOCPKey].exp;
 	e.data = data;
 
 	DBEventMutex.lock();
@@ -778,16 +812,19 @@ void Server::AddDBEvent(UINT IOCPKey, UINT id, enumOperation op)
 	DBEventMutex.unlock();
 }
 
-long long Server::GetTime()
+void Server::AddDBEvent(UINT IOCPKey, WCHAR* str, enumOperation op)
 {
-	const long long _Freq = _Query_perf_frequency();	// doesn't change after system boot
-	const long long _Ctr = _Query_perf_counter();
-	const long long _Whole = (_Ctr / _Freq) * 1000;
-	const long long _Part = (_Ctr % _Freq) * 1000 / _Freq;
-	return _Whole + _Part;
+	sEvent e;
+	e.operation = op;
+	e.IOCPKey = IOCPKey;
+	e.data = str;
+
+	DBEventMutex.lock();
+	DBEventQueue.push(e);
+	DBEventMutex.unlock();
 }
 
-bool Server::CanSee(int a, int b)
+bool Server::CanSee(int a, int b, int range)
 {
 	CNPC *oa = nullptr;
 	CNPC *ob = nullptr;
@@ -800,7 +837,7 @@ bool Server::CanSee(int a, int b)
 		(oa->x - ob->x) * (oa->x - ob->x) +
 		(oa->y - ob->y) * (oa->y - ob->y);
 
-	return distance <= VIEW_RADIUS * VIEW_RADIUS;
+	return distance <= range * range;
 }
 
 void Server::DisConnectClient(int key)
@@ -815,7 +852,7 @@ void Server::DisConnectClient(int key)
 	sc_packet_remove_player p;
 	p.id = key;
 	p.size = sizeof(sc_packet_remove_player);
-	p.type = SC_REMOVE_PLAYER;
+	p.type = SC_REMOVE_OBJECT;
 
 	ClientArr[key].viewlist_mutex.lock();
 	std::unordered_set<int> oldviewlist = ClientArr[key].viewlist;
@@ -846,14 +883,13 @@ void Server::DisConnectClient(int key)
 	m_SpaceMutex[spaceIdx].lock();
 	m_Space[spaceIdx].erase(key);
 	m_SpaceMutex[spaceIdx].unlock();
-	m_pScene->RemovePlayerOnBoard(ClientArr[key].x, ClientArr[key].y);
 
 	std::cout << "Client " << ClientArr[key].ID << " Disconnected" << std::endl;
 	ClientArr[key].inUse = false;
 	ClientArr[key].bActive = false;
 }
 
-void Server::MoveNPC(int key)
+void Server::MoveNPC(int key, int dir)
 {
 	////////////////////////////////////////////////////////////////////////////////
 
@@ -861,36 +897,51 @@ void Server::MoveNPC(int key)
 		return;
 
 	int oldSpaceIdx = GetSpaceIndex(key);
+	if (dir == -1) {
+		dir = rand() % 4 + 1;
+	}
 
-	switch (rand() % 4) {
-	case 0:
+	switch (dir) {
+	case DIR::DOWN:
 		NPCList[key].y--;
 		if (!m_pScene->isCollide(NPCList[key].x, NPCList[key].y)) {
 			NPCList[key].y++; break;
 		}
 		break;
 
-	case 1:
+	case DIR::UP:
 		NPCList[key].y++;
 		if (!m_pScene->isCollide(NPCList[key].x, NPCList[key].y)) {
 			NPCList[key].y--; break;
 		}
 		break;
 
-	case 2:
+	case DIR::RIGHT:
 		NPCList[key].x++;
 		if (!m_pScene->isCollide(NPCList[key].x, NPCList[key].y)) {
 			NPCList[key].x--; break;
 		}
 		break;
 
-	case 3:
+	case DIR::LEFT:
 		NPCList[key].x--;
 		if (!m_pScene->isCollide(NPCList[key].x, NPCList[key].y)) {
 			NPCList[key].x++; break;
 		}
 		break;
+
+	default:
+		break;
 	}
+
+	lua_getglobal(NPCList[key].L, "setPosition");
+	lua_pushnumber(NPCList[key].L, NPCList[key].x);
+	lua_pushnumber(NPCList[key].L, NPCList[key].y);
+	int error = lua_pcall(NPCList[key].L, 2, 0, 0);
+	if(error != 0)
+		DisplayLuaError(NPCList[key].L, error);
+	lua_pop(NPCList[key].L, 1);
+	
 	int NewSpaceIdx = GetSpaceIndex(key);
 	if (oldSpaceIdx != NewSpaceIdx) {
 		m_SpaceMutex[oldSpaceIdx].lock();
@@ -947,4 +998,25 @@ void Server::MoveNPC(int key)
 
 
 	//AddTimerEvent(key, op_Move, MOVE_TIME);
+}
+
+void Server::RemoveNPC(int key, std::unordered_set<int>& viewlist)
+{
+	int spaceidx = GetSpaceIndex(key);
+	GetSpaceMutex(spaceidx).lock();
+	GetSpace(spaceidx).erase(key);
+	GetSpaceMutex(spaceidx).unlock();
+
+	for (int idx : viewlist) {
+		if (idx < NPC_START) {
+			ClientArr[idx].viewlist_mutex.lock();
+			ClientArr[idx].viewlist.erase(key);
+			ClientArr[idx].viewlist_mutex.unlock();
+
+			SendRemoveObject(idx, key);
+		}
+	}
+
+	NPCList[key].bActive = false;
+	AddTimerEvent(key, enumOperation::npc_respawn, RESPAWN_TIME);
 }

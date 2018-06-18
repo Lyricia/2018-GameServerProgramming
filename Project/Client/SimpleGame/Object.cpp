@@ -13,7 +13,8 @@ void Object::releaseObject()
 
 void Object::setChatMsg(WCHAR * msg)
 {
-	wcsncpy_s(m_Message, msg, MAX_STR_SIZE);
+	auto error = wcsncpy_s(m_Message, msg, MAX_STR_SIZE);
+	int a = 0;
 }
 
 void Object::move(DIR dir)

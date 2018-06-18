@@ -60,3 +60,21 @@ inline Vector3D<int> Vec3f_to_Vec3i(Vector3D<float>& fvec)
 {
 	return Vector3D<int>{ static_cast<int>(fvec.x), static_cast<int>(fvec.y), static_cast<int>(fvec.z) };
 }
+
+inline int CalcDist(int ax, int ay, int bx, int by) {
+	int dist = -1;
+
+	dist = 
+		(ax - bx) * (ax - bx) +
+		(ay - by) * (ay - by);
+
+	return dist;
+}
+
+inline long long GetSystemTime() {
+	const long long _Freq = _Query_perf_frequency();	// doesn't change after system boot
+	const long long _Ctr = _Query_perf_counter();
+	const long long _Whole = (_Ctr / _Freq) * 1000;
+	const long long _Part = (_Ctr % _Freq) * 1000 / _Freq;
+	return _Whole + _Part;
+}

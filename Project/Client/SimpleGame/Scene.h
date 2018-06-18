@@ -7,6 +7,11 @@ class Client;
 class Renderer;
 class Object;
 
+struct attackEvent {
+	int x, y;
+	int type;
+};
+
 class Scene
 {
 private:
@@ -19,11 +24,11 @@ private:
 
 	Client*				m_Client;
 	int					m_Board[BOARD_WIDTH][BOARD_HEIGHT] = {};
+	int					m_AttBoard[BOARD_WIDTH][BOARD_HEIGHT] = {};
 
 	unordered_map<UINT, Object*>	m_Player_ID_Matcher;
 	list<Object*>					m_Players;
-
-	Object*				Player = nullptr;
+	Object*							Player = nullptr;
 
 public:
 	Scene();

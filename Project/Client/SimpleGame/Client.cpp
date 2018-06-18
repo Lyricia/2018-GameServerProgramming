@@ -51,12 +51,12 @@ void Client::InitClient()
 	recvThread = thread{ [&]() { CompletePacket(); } };
 
 	std::cout << "Enter ID : ";
-	std::cin >> ClientID;
+	std::wcin >> ClientName;
 
 	cs_packet_login p;
 	p.size = sizeof(cs_packet_login);
 	p.type = CS_LOGIN;
-	p.id = ClientID;
+	wcsncpy_s(p.ID_STR, ClientName, 10);
 	SendPacket((char*)&p);
 }
 

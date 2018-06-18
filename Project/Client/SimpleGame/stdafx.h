@@ -15,6 +15,7 @@
 #include <string>
 #include <list>
 #include <mutex>
+#include <queue>
 #include <unordered_map>
 
 #include <comdef.h>
@@ -38,9 +39,9 @@ using std::list;
 using std::vector;
 using namespace std;
 
-enum DIR { LEFT, RIGHT, UP, DOWN};
+//enum DIR { LEFT, RIGHT, UP, DOWN};
 
-enum OBJTYPE {
+enum PieceTYPE {
 	KING,
 	QUEEN,
 	BISHOP,

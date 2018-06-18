@@ -2,6 +2,8 @@
 
 class Scene;
 
+void DisplayLuaError(lua_State* L, int error);
+
 enum MSGTYPE
 {
 	HEARTBEAT,
@@ -12,7 +14,7 @@ enum MSGTYPE
 enum enumOperation {
 	op_Send, op_Recv, op_Move,
 	db_login, db_logout,
-	npc_player_move, npc_bye
+	npc_player_move, npc_bye, npc_respawn
 };
 
 enum ServerOperationMode {
@@ -36,6 +38,7 @@ struct ClientInfo
 	SOCKET			Client_Sock;
 	int				ID = NULL;
 
+
 	bool			inUse;
 	bool			bActive;
 	int				packetsize;
@@ -57,14 +60,34 @@ public:
 	bool			inUse;
 	bool			bActive;
 
+	WORD			hp;
 	SHORT			x, y;
+	BYTE			level;
 	lua_State*		L;
+	ObjType			ObjectType;
+	DWORD			exp;
+
+	void getDamaged(int damage, int attacker) {
+		int error = lua_getglobal(L, "event_get_Damaged");
+		lua_pushnumber(L, damage);
+ 		lua_pushnumber(L, attacker);
+		error = lua_pcall(L, 2, 0, 0);
+
+		lua_getglobal(L, "hp");
+		hp = (int)lua_tointeger(L, -1);
+		lua_pop(L, 2);
+		cout << hp << endl;
+	}
+	bool isDead() {
+		return hp <= 0;
+	}
 };
 
 class CClient : public CNPC {
 public:
 	stOverlappedEx	OverlappedEx;
 	SOCKET			Client_Sock;
+	WCHAR			UserName[10] = {};
 
 	std::unordered_set<int>	viewlist;
 	std::mutex				viewlist_mutex;
@@ -72,6 +95,30 @@ public:
 	int				packetsize;
 	int				prev_packetsize;
 	unsigned char	prev_packet[MAX_PACKET_SIZE];
+	
+	DWORD			exp;
+	int				explimit = 100;
+
+	long long		lastattacktime = 0;
+
+	void getDamaged(int damage, int attacker) {
+		hp -= damage;
+		cout << attacker << " attack " << ID << " || damage : " << damage << " || hp : " << hp << "\n";
+	}
+	void EarnEXP(int _exp) {
+		exp += _exp;
+		while (true) {
+			if (exp > explimit) {
+				level++;
+				exp -= explimit;
+				explimit *= 2;
+				cout << "level up " << (int)level << ", exp : " << exp;
+			}
+			else {
+				break;
+			}
+		}
+	}
 };
 
 struct sEvent 
@@ -98,6 +145,7 @@ struct DBUserData {
 		nPosY, 
 		nHP,
 		nExp;
+	SQLWCHAR	nName[10];
 };
 
 class Server
@@ -163,12 +211,12 @@ public:
 
 	void AddTimerEvent(UINT id, enumOperation op, long long time);
 	void AddDBEvent(UINT IOCPKey, UINT id, enumOperation op);
+	void AddDBEvent(UINT IOCPKey, WCHAR* str, enumOperation op);
 
-	long long GetTime();
-
-	bool CanSee(int a, int b);
+	bool CanSee(int a, int b, int range = VIEW_RADIUS);
 	void DisConnectClient(int key);
-	void MoveNPC(int key);
+	void MoveNPC(int key, int dir = -1);
+	void RemoveNPC(int key, std::unordered_set<int>& viewlist);
 
 	std::unordered_set<int>& GetSpace(int idx) { return m_Space[idx];}
 	std::mutex& GetSpaceMutex(int idx) { return m_SpaceMutex[idx]; }

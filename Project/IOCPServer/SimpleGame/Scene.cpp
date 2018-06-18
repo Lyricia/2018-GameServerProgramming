@@ -29,8 +29,28 @@ void Scene::buildScene()
 			m_pNPCList[i].x = rand() % (BOARD_WIDTH - 100);
 			m_pNPCList[i].y = rand() % (BOARD_HEIGHT - 100);
 		} while (!isCollide(m_pNPCList[i].x, m_pNPCList[i].y));
+
 		int newSpaceIdx = m_Server->GetSpaceIndex(i);
 		m_Server->GetSpace(newSpaceIdx).insert(i);
+		
+		SetSection(m_pNPCList[i]);
+
+		lua_getglobal(m_pNPCList[i].L, "setPosition");
+		lua_pushnumber(m_pNPCList[i].L, m_pNPCList[i].x);
+		lua_pushnumber(m_pNPCList[i].L, m_pNPCList[i].y);
+		int error = lua_pcall(m_pNPCList[i].L, 2, 0, 0);
+		lua_pop(m_pNPCList[i].L, 1);
+		if (error != 0)
+			DisplayLuaError(m_pNPCList[i].L, error);
+
+		lua_getglobal(m_pNPCList[i].L, "setStatus");
+		lua_pushnumber(m_pNPCList[i].L, m_pNPCList[i].hp);
+		lua_pushnumber(m_pNPCList[i].L, m_pNPCList[i].ObjectType);
+		lua_pushnumber(m_pNPCList[i].L, m_pNPCList[i].level);
+		error = lua_pcall(m_pNPCList[i].L, 3, 0, 0);
+		if(error != 0)
+			DisplayLuaError(m_pNPCList[i].L, error);
+		lua_pop(m_pNPCList[i].L, 1);
 	}					 
 }
 
@@ -62,48 +82,57 @@ void Scene::ProcessPacket(int clientid, unsigned char * packet)
 	{
 		auto p = (cs_packet_move*)packet;
 		switch (p->dir) {
-		case CS_UP:
+		case DIR::UP:
 			client.y--;
 			if (!isCollide(client.x, client.y)) {
 				client.y++; break;
 			}
 			break;
 
-		case CS_DOWN:
+		case DIR::DOWN:
 			client.y++;
 			if (!isCollide(client.x, client.y)) {
 				client.y--; break;
 			}
 			break;
 
-		case CS_RIGHT:
+		case DIR::RIGHT:
 			client.x++;
 			if (!isCollide(client.x, client.y)) {
 				client.x--; break;
 			}
 			break;
 
-		case CS_LEFT:
+		case DIR::LEFT:
 			client.x--;
 			if (!isCollide(client.x, client.y)) {
 				client.x++; break;
 			}
 			break;
 		}
+		MoveObject(clientid, oldSpaceIdx);
 		break;
 	}
+
 	case CS_LOGIN:
 	{
 		cs_packet_login * p = (cs_packet_login*)packet;
-		m_Server->AddDBEvent(clientid, p->id, db_login);
+		m_Server->AddDBEvent(clientid, p->ID_STR, db_login);
 		return;
 	}
+
+	case CS_ATTACK:
+	{
+		cs_packet_attack* p = (cs_packet_attack*)packet;
+		if(m_pClientArr[p->id].lastattacktime + 500 < GetSystemTime())
+			AttackObject(p->id, 2);
+		break;
+	}
+
 	default:
 		cout << "unknown protocol from client [" << clientid << "]" << endl;
 		return;
 	}
-	
-	MoveObject(clientid, oldSpaceIdx);
 }
 
 void Scene::MoveObject(int clientid, int oldSpaceIdx)
@@ -120,8 +149,6 @@ void Scene::MoveObject(int clientid, int oldSpaceIdx)
 		m_Server->GetSpace(newSpaceIdx).insert(clientid);
 		m_Server->GetSpaceMutex(newSpaceIdx).unlock();
 	}
-
-	//m_Board[client.x][client.y] = clientid;
 
 	sc_packet_pos sp;
 	sp.id = clientid;
@@ -233,6 +260,151 @@ void Scene::MoveObject(int clientid, int oldSpaceIdx)
 	m_Server->SendPacket(clientid, &sp);
 }
 
+void Scene::AttackObject(int attcker_id, int att_range, int targetid)
+{
+	if (targetid != INVALID)
+	{
+		if (attcker_id < NPC_START) {
+			if (targetid < NPC_START) {
+				if (CalcDist(
+					m_pClientArr[attcker_id].x, m_pClientArr[attcker_id].y,
+					m_pClientArr[targetid].x, m_pClientArr[targetid].y) < att_range) {
+					m_pClientArr[targetid].hp -= 10;
+				}
+			}
+			else if (attcker_id >= NPC_START) {
+				if (CalcDist(
+					m_pClientArr[attcker_id].x, m_pClientArr[attcker_id].y,
+					m_pNPCList[targetid].x, m_pNPCList[targetid].y) < att_range) {
+					m_pNPCList[targetid].getDamaged(10, attcker_id);
+				}
+			}
+		}
+		else if (attcker_id >= NPC_START) {
+
+		}
+	}
+
+	if (attcker_id < NPC_START) {
+		CClient& client = m_Server->GetClient(attcker_id);
+		int newSpaceIdx = m_Server->GetSpaceIndex(attcker_id);
+
+		unordered_set<int> inRange_list;
+		unordered_set<int> view_list;
+		int idx = 0;
+		for (int i = -1; i <= 1; ++i) {
+			for (int j = -1; j <= 1; ++j) {
+				idx = newSpaceIdx + i + (j * SPACE_X);
+				if (idx < 0 || idx >= SPACE_X * SPACE_Y) continue;
+
+				m_Server->GetSpaceMutex(idx).lock();
+				auto& Space_objlist = m_Server->GetSpace(idx);
+				m_Server->GetSpaceMutex(idx).unlock();
+
+				for (int space_obj_idx : Space_objlist)
+				{
+					if (space_obj_idx == attcker_id) continue;
+					if (space_obj_idx < NPC_START && m_pClientArr[space_obj_idx].inUse == false) continue;
+					if (m_Server->CanSee(attcker_id, space_obj_idx) == false) continue;
+					view_list.insert(space_obj_idx);
+					if (m_Server->CanSee(attcker_id, space_obj_idx, att_range) == false) continue;
+					inRange_list.insert(space_obj_idx);
+				}
+			}
+		}
+		view_list.insert(attcker_id);
+
+		for (auto id_inRange : inRange_list) {
+			if (id_inRange < NPC_START) 
+			{
+				auto& target = m_pClientArr[id_inRange];
+				target.hp -= 10;
+			}
+			else if (id_inRange >= NPC_START) 
+			{
+				auto& target = m_pNPCList[id_inRange];
+				target.getDamaged(50, attcker_id);
+				if (target.isDead())
+				{
+					m_Server->RemoveNPC(id_inRange, view_list);
+					m_Server->GetClient(attcker_id).EarnEXP(target.level*10);
+				}
+			}
+		}
+	}
+	else if (attcker_id >= NPC_START) {
+	}
+
+	sc_packet_attack p;
+	p.size = sizeof(sc_packet_attack);
+	p.type = SC_ATTACK;
+	p.id = attcker_id;
+	p.att_type = 0;
+	for (int i = 0; i < MAX_USER; ++i) {
+		if (m_pClientArr[i].bActive)
+			m_Server->SendPacket(i, &p);
+	}
+	m_pClientArr[attcker_id].lastattacktime = GetSystemTime();
+}
+
+void Scene::SetSection(CNPC & npc)
+{
+	int x = npc.x;
+	int y = npc.x;
+
+	//section 4
+	if (y <= 120) {
+		npc.ObjectType = ObjType::MOB_Peaceful_ranged;
+		npc.level = rand() % 20;
+	}
+		
+	//section 1
+	if (0 <= x && x < 139) {
+		if (rand() % 4 == 0)
+			npc.ObjectType = ObjType::MOB_Peaceful_ranged;
+		else
+			npc.ObjectType = ObjType::MOB_Peaceful_melee;
+
+		npc.level = rand() % 20;
+	}
+	
+	//section 2
+	if (139 <= x && x < 270) {
+		if (rand() % 3 == 0) {
+			npc.ObjectType = ObjType::MOB_Chaotic_melee;
+			npc.level = 20 + rand() % 20;
+		}
+		else {
+			if (rand() % 2)
+				npc.ObjectType = ObjType::MOB_Peaceful_melee;
+			else
+				npc.ObjectType = ObjType::MOB_Peaceful_ranged;
+
+			npc.level = 5 + rand() % 20;
+		}
+	}
+
+	//section 3
+	if (270 <= x && x < 399) {
+		if (rand() % 3 == 0) {
+			if (rand() % 2)
+				npc.ObjectType = ObjType::MOB_Peaceful_melee;
+			else
+				npc.ObjectType = ObjType::MOB_Peaceful_ranged;
+			npc.level = 30 + rand() % 20;
+		}
+		else {
+			if (rand() % 2)
+				npc.ObjectType = ObjType::MOB_Chaotic_melee;
+			else
+				npc.ObjectType = ObjType::MOB_Chaotic_ranged;
+			npc.level = 40 + rand() % 20;
+		}
+	}
+	npc.hp = npc.level * 100;
+	npc.exp = npc.level * npc.ObjectType * 5;
+}
+
 void Scene::update()
 {
 	g_Timer->getTimeset();
@@ -267,7 +439,6 @@ void Scene::ReadGroundPos()
 
 	for (int i = 0; i < nVerts; ++i) {
 		m_Board[pVerts[i].x][pVerts[i].y] = 1;
-		//cout << pVerts[i].x << ", " << pVerts[i].y << "\n";
 	}
 }
 

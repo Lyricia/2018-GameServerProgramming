@@ -27,10 +27,11 @@ int CAPI_sendMessage(lua_State* L)
 
 int CAPI_Server_MoveNPC(lua_State* L) 
 {
-	int NPCID = (int)lua_tointeger(L, -1);
-	lua_pop(L, 2);
+	int dir = (int)lua_tointeger(L, -1);
+	int NPCID = (int)lua_tointeger(L, -2);
+	lua_pop(L, 3);
 
-	Server_Instance->MoveNPC(NPCID);
+	Server_Instance->MoveNPC(NPCID, dir);
 	Server_Instance->AddTimerEvent(NPCID, op_Move, MOVE_TIME);
 	return 0;
 }
@@ -62,5 +63,49 @@ int CAPI_get_y(lua_State* L)
 		y = Server_Instance->GetClient(id).y;
 	}
 	lua_pushnumber(L, y);
+	return 1;
+}
+
+int CAPI_get_Dist(lua_State* L)
+{
+	int id = (int)lua_tointeger(L, -1);
+	lua_pop(L, 2);
+
+	lua_getglobal(L, "x");
+	int ax = (int)lua_tointeger(L, -1);
+	lua_pop(L, 2);
+	lua_getglobal(L, "y");
+	int ay = (int)lua_tointeger(L, -1);
+	lua_pop(L, 2);
+
+	int bx = Server_Instance->GetClient(id).x;
+	int by = Server_Instance->GetClient(id).y;
+	
+	lua_pushnumber(L, CalcDist(ax, ay, bx, by));
+	return 1;
+}
+
+int CAPI_Attack_Player(lua_State* L)
+{
+	int damage = (int)lua_tointeger(L, -1);
+	int targetid = (int)lua_tointeger(L, -2);
+	int NPCID = (int)lua_tointeger(L, -3);
+	lua_pop(L, 4);
+
+	auto& cl = Server_Instance->GetClient(targetid);
+	cl.getDamaged(damage, NPCID);
+
+	return 0;
+}
+
+int CAPI_get_playeractive(lua_State* L) {
+	int playerid = (int)lua_tointeger(L, -1);
+	lua_pop(L, 2);
+	
+	if(playerid< NPC_START)
+		lua_pushnumber(L, Server_Instance->GetClient(playerid).bActive);
+	else
+		lua_pushnumber(L, false);
+
 	return 1;
 }

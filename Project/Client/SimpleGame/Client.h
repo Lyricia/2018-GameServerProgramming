@@ -15,6 +15,8 @@ class Client
 {
 	WSADATA				wsa;
 	int					ClientID;
+	WCHAR				ClientName[10];
+	int					ClientLevel = 1;
 	Scene*				pScene = nullptr;
 
 	SOCKET				Server_Sock;
@@ -43,4 +45,6 @@ public:
 	
 	void RegisterScene(Scene* s) { pScene = s; }
 	void SendPacket(char* packet);
+	WCHAR* getUserName() { return ClientName; }
+	int getUserLevel() { return ClientLevel; }
 };

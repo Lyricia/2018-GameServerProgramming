@@ -12,17 +12,16 @@ class Object
 {
 protected:
 	int					m_id;
-	OBJTYPE				m_type;
+	PieceTYPE			m_type;
 	Vector3D<float>		m_Position;
 	int					m_Team;
 	float				m_Priority;
 	WCHAR				m_Message[MAX_STR_SIZE] = {};
 	float				m_MsgTimer = 0.f;
 
-
 public:
 	Object();
-	Object(OBJTYPE type, int size, Vector3D<float> pos) : m_type(type), m_Position(pos) {};
+	Object(PieceTYPE type, int size, Vector3D<float> pos) : m_type(type), m_Position(pos) {};
 	~Object() {};
 	void releaseObject();
 
@@ -35,13 +34,13 @@ public:
 	void setPosition(Vector3D<int> pos) { m_Position = {pos.x, pos.y, pos.z}; }
 	void setID(int id) { m_id = id; }
 	void setTeam(int team) { m_Team = team; }
-	void setType(OBJTYPE type) { m_type = type; }
+	void setType(PieceTYPE type) { m_type = type; }
 	void setPriority(float pri) { m_Priority = pri; }
 
 	void move(DIR dir);
 	
 	
-	OBJTYPE				getType() { return m_type; }
+	PieceTYPE			getType() { return m_type; }
 	int					getTeam() { return m_Team; }
 	const int			getID() { return m_id; }
 	const float			getPriority() { return m_Priority; }

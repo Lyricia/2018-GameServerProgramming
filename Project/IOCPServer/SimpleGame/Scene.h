@@ -1,6 +1,5 @@
 #pragma once
 
-#define PIECESIZE 80
 #define INVALID -1
 
 class Timer;
@@ -18,7 +17,7 @@ private:
 
 	int			ChessBoard;
 	int			ChessPiece;
-
+	                           
 	GAMESTATUS	GameStatus = GAMESTATUS::STOP;
 
 	Object*		m_Target = nullptr;
@@ -46,6 +45,8 @@ public:
 
 	void ProcessPacket(int id, unsigned char* packet);
 	void MoveObject(int clientid, int oldSpaceIdx);
+	void AttackObject(int objectid, int att_range, int targetid = INVALID);
+	void SetSection(CNPC& npc);
 
 	void RemovePlayerOnBoard(const int x, const int y) { m_Board[x][y] = INVALID; }
 	void update();
