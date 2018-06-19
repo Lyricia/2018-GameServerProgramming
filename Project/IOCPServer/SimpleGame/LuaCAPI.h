@@ -95,6 +95,14 @@ int CAPI_Attack_Player(lua_State* L)
 	auto& cl = Server_Instance->GetClient(targetid);
 	cl.getDamaged(damage, NPCID);
 
+	sc_packet_attack p;
+	p.size = sizeof(sc_packet_attack);
+	p.type = SC_ATTACK;
+	p.id = NPCID;
+	p.targetid = cl.ID;
+	p.att_type = 0;
+	Server_Instance->SendPacketToAll(&p);
+
 	return 0;
 }
 

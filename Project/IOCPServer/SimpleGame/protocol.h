@@ -18,7 +18,7 @@
 #define MAX_USER		10000
 
 #define NPC_START		10001
-#define NUM_OF_NPC		NPC_START + 1
+#define NUM_OF_NPC		NPC_START + 10000
 
 #define MAX_STR_SIZE	100
 #define MAX_NAME_LEN	50
@@ -142,6 +142,7 @@ struct sc_packet_attack {
 	BYTE size;
 	BYTE type;
 	WORD id;
+	WORD targetid;
 	BYTE att_type;
 };
 #pragma pack (pop)

@@ -273,6 +273,14 @@ void Server::SendPacket(int clientkey, void * packet)
 	WSASend(ClientArr[clientkey].Client_Sock, &o->wsaBuf, 1, NULL, 0, &o->wsaOverlapped, NULL);
 }
 
+void Server::SendPacketToAll(void * packet)
+{
+	for (int i = 0; i < MAX_USER; ++i) {
+		if (ClientArr[i].bActive)
+			SendPacket(i, packet);
+	}
+}
+
 void Server::SendPutObject(int client, int objid)
 {
 	sc_packet_put_player p;
@@ -1019,4 +1027,32 @@ void Server::RemoveNPC(int key, std::unordered_set<int>& viewlist)
 
 	NPCList[key].bActive = false;
 	AddTimerEvent(key, enumOperation::npc_respawn, RESPAWN_TIME);
+}
+
+int Server::GetSector(int idx)
+{
+	CNPC* cl;
+	if (idx < NPC_START) {
+		cl = &ClientArr[idx];
+	}
+	else if (idx >= NPC_START) {
+		cl = &NPCList[idx];
+	}
+
+	// Sector 4
+	if (cl->y <= 120) {
+		return 4;
+	}
+	// Sector 1
+	if (0 <= cl->x && cl->x < 139) {
+		return 1;
+	}
+	// Sector 2
+	if (139 <= cl->x && cl->x < 270) {
+		return 2;
+	}
+	// Sector 3
+	if (270 <= cl->x && cl->x < 399) {
+		return 3;
+	}
 }

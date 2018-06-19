@@ -33,7 +33,7 @@ void Scene::buildScene()
 		int newSpaceIdx = m_Server->GetSpaceIndex(i);
 		m_Server->GetSpace(newSpaceIdx).insert(i);
 		
-		SetSection(m_pNPCList[i]);
+		SetSector(m_pNPCList[i]);
 
 		lua_getglobal(m_pNPCList[i].L, "setPosition");
 		lua_pushnumber(m_pNPCList[i].L, m_pNPCList[i].x);
@@ -160,6 +160,7 @@ void Scene::MoveObject(int clientid, int oldSpaceIdx)
 	// 새로 viewList에 들어오는 객체 처리
 	unordered_set<int> new_view_list;
 	int idx = 0;
+	int sectoridx = m_Server->GetSector(clientid);
 	for (int i = -1; i <= 1; ++i) {
 		for (int j = -1; j <= 1; ++j) {
 			idx = newSpaceIdx + i + (j * SPACE_X);
@@ -173,6 +174,7 @@ void Scene::MoveObject(int clientid, int oldSpaceIdx)
 			{
 				if (objidx == clientid) continue;
 				if (objidx < NPC_START && m_pClientArr[objidx].inUse == false) continue;
+				if ((m_Server->GetSector(objidx) - sectoridx) * (m_Server->GetSector(objidx) - sectoridx) != 1)continue;
 				if (m_Server->CanSee(clientid, objidx) == false) continue;
 				// 시야 내에 있는 플레이어가 이동했다는 이벤트 발생
 				if (objidx >= NPC_START) {
@@ -340,14 +342,12 @@ void Scene::AttackObject(int attcker_id, int att_range, int targetid)
 	p.type = SC_ATTACK;
 	p.id = attcker_id;
 	p.att_type = 0;
-	for (int i = 0; i < MAX_USER; ++i) {
-		if (m_pClientArr[i].bActive)
-			m_Server->SendPacket(i, &p);
-	}
+	m_Server->SendPacketToAll(&p);
+
 	m_pClientArr[attcker_id].lastattacktime = GetSystemTime();
 }
 
-void Scene::SetSection(CNPC & npc)
+void Scene::SetSector(CNPC & npc)
 {
 	int x = npc.x;
 	int y = npc.x;

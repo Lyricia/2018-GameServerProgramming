@@ -103,7 +103,7 @@ public:
 
 	void getDamaged(int damage, int attacker) {
 		hp -= damage;
-		cout << attacker << " attack " << ID << " || damage : " << damage << " || hp : " << hp << "\n";
+		//cout << attacker << " attack " << ID << " || damage : " << damage << " || hp : " << hp << "\n";
 	}
 	void EarnEXP(int _exp) {
 		exp += _exp;
@@ -197,6 +197,7 @@ public:
 	void CreateConnection(UINT clientkey);
 
 	void SendPacket(int clientkey, void* packet);
+	void SendPacketToAll(void* packet);
 	void SendPutObject(int client, int objid);
 	void SendRemoveObject(int client, int objid);
 	void SendChatPacket(int to, int from, WCHAR * message);
@@ -218,6 +219,7 @@ public:
 	void MoveNPC(int key, int dir = -1);
 	void RemoveNPC(int key, std::unordered_set<int>& viewlist);
 
+	int GetSector(int idx);
 	std::unordered_set<int>& GetSpace(int idx) { return m_Space[idx];}
 	std::mutex& GetSpaceMutex(int idx) { return m_SpaceMutex[idx]; }
 	int GetSpaceIndex(int id) {
@@ -232,7 +234,7 @@ public:
 	}
 
 	bool ChkInSpace(int clientid, int targetid);
-
+	bool ChkSector();
 	void WorkThreadProcess();
 	void TimerThreadProcess();
 	void DBThreadProcess();
