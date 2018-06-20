@@ -15,12 +15,8 @@ class Scene
 private:
 	Timer*		g_Timer = nullptr;
 
-	int			ChessBoard;
-	int			ChessPiece;
-	                           
 	GAMESTATUS	GameStatus = GAMESTATUS::STOP;
 
-	Object*		m_Target = nullptr;
 	int			m_Board[BOARD_WIDTH][BOARD_HEIGHT] = {-1};
 
 	Server*			m_Server;
@@ -45,6 +41,7 @@ public:
 
 	void ProcessPacket(int id, unsigned char* packet);
 	void MoveObject(int clientid, int oldSpaceIdx);
+	void MoveByCoord(int x, int y, int clientid, int oldSpaceIdx);
 	void AttackObject(int objectid, int att_range, int targetid = INVALID);
 	void SetSector(CNPC& npc);
 

@@ -13,7 +13,8 @@
 #define ATT_RAD_RANGE	5
 
 #define	MOVE_TIME		1000
-#define RESPAWN_TIME	1000
+#define RESPAWN_TIME	10000
+#define HEAL_TIME		1000
 
 #define MAX_USER		10000
 
@@ -54,7 +55,7 @@ enum ObjType {
 	,	MOB_Peaceful_ranged	= 15
 	,	MOB_Chaotic_melee	= 20
 	,	MOB_Chaotic_ranged	= 25
-	,	MOB_Boss			= 30
+	,	MOB_Boss			= 50
 };
 
 #pragma pack (push, 1)
@@ -125,7 +126,6 @@ struct sc_packet_remove_player {
 struct sc_packet_chat {
 	BYTE size;
 	BYTE type;
-	WORD id;
 	WCHAR message[MAX_STR_SIZE];
 };
 

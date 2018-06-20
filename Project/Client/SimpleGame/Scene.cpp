@@ -124,44 +124,12 @@ void Scene::mouseinput(int button, int state, int x, int y)
 {
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_UP && GameStatus == GAMESTATUS::RUNNING)
 	{
+		pointx = x;
+		pointy = y;
 	}
 }
 
-void Scene::update()
-{
-	g_Timer->getTimeset();
-	double timeElapsed = g_Timer->getTimeElapsed();
-	if (GameStatus == GAMESTATUS::RUNNING) 
-	{
-		int currx = 0, curry = 0;
-		if (Player != nullptr)
-			currx = Player->getPosition().x, curry = Player->getPosition().y;
 
-		for (int i = 0; i < BOARD_WIDTH; ++i) {
-			for (int j = 0; j < BOARD_HEIGHT; ++j) {
-				if (m_AttBoard[i][j] != -1) {
-					m_AttBoard[i][j] -= 3;
-				}
-			}
-		}
-
-		for (auto& p : m_Players) {
-			float time = p->getMsgTimer();
-			if (time > 0) {
-				p->setMsgTimer(time - timeElapsed);
-			}
-			else if (time < 0) {
-				p->setChatMsg(L"");
-			}
-		}
-	}
-	else if (GameStatus == GAMESTATUS::PAUSE)
-	{
-	}
-	else
-	{
-	}
-}
 
 void Scene::ProcessPacket(char * p)
 {
@@ -171,6 +139,8 @@ void Scene::ProcessPacket(char * p)
 	{
 		cout << "OK" << endl;
 		GameStatus = GAMESTATUS::RUNNING;
+		sc_packet_loginok* packet = (sc_packet_loginok*)p;
+		m_Client->setUserData(packet->level, packet->hp, packet->exp);
 		break;
 	}
 	case SC_LOGINFAIL:
@@ -199,7 +169,7 @@ void Scene::ProcessPacket(char * p)
 			}
 		}
 		else {
-			if (cl->getID() > NPC_START) {
+			if (cl->getID() >= NPC_START) {
 				if (my_packet->ObjType == ObjType::MOB_Peaceful_melee) {
 					cl->setTeam(TEAM::WHITE);
 					cl->setType(PieceTYPE::PAWN);
@@ -213,8 +183,12 @@ void Scene::ProcessPacket(char * p)
 					cl->setType(PieceTYPE::PAWN);
 				}
 				else if (my_packet->ObjType == ObjType::MOB_Chaotic_ranged) {
-					cl->setTeam(TEAM::BLACK);
+					cl->setTeam(TEAM::BLACK);					    
 					cl->setType(PieceTYPE::KNIGHT);
+				}
+				else if (my_packet->ObjType == ObjType::MOB_Boss) {
+					cl->setTeam(TEAM::BLACK);
+					cl->setType(PieceTYPE::KING);
 				}
 				else {
 					cout << "why ur in here\n";
@@ -258,27 +232,85 @@ void Scene::ProcessPacket(char * p)
 	case SC_CHAT: 
 	{
 		sc_packet_chat *my_packet = reinterpret_cast<sc_packet_chat *>(p);
-		if (m_Player_ID_Matcher.count(my_packet->id)) {
-			m_Player_ID_Matcher[my_packet->id]->setChatMsg(my_packet->message);
-			m_Player_ID_Matcher[my_packet->id]->setMsgTimer(5.f);
-		}
+		if (m_Chatlog.size() > 12)
+			m_Chatlog.pop_back();
+		m_Chatlog.push_front(make_pair<wstring, int>(my_packet->message, 100));
 		break;
 	}
 	case SC_ATTACK:
 	{
 		sc_packet_attack *my_packet = reinterpret_cast<sc_packet_attack *>(p);
+		if (m_Player_ID_Matcher.count(my_packet->id) == 0) break;
+
 		auto pos = m_Player_ID_Matcher[my_packet->id]->getPosition();
 		auto e = attackEvent();
 		e.x = pos.x;
 		e.y = pos.y;
 		e.type = my_packet->att_type;
 		switch (e.type) {
-		case 0: {
+		case 0 :
+		{
+			m_AttBoard[e.x][e.y + 1] = 100;
+			m_AttBoard[e.x - 1][e.y] = 100;				m_AttBoard[e.x][e.y] = 100;				m_AttBoard[e.x + 1][e.y] = 100;
+			m_AttBoard[e.x][e.y - 1] = 100;
+			break;
+		}
+		case 1:
+		case ObjType::MOB_Chaotic_melee:
+		case ObjType::MOB_Peaceful_melee: {
 			m_AttBoard[e.x - 1][e.y + 1] = 100;			m_AttBoard[e.x][e.y + 1] = 100;			m_AttBoard[e.x + 1][e.y + 1] = 100;
 			m_AttBoard[e.x - 1][e.y] = 100;				m_AttBoard[e.x][e.y] = 100;				m_AttBoard[e.x + 1][e.y] = 100;
 			m_AttBoard[e.x - 1][e.y - 1] = 100;			m_AttBoard[e.x][e.y - 1] = 100;			m_AttBoard[e.x + 1][e.y - 1] = 100;
 			break;
 		}
+		case ObjType::MOB_Chaotic_ranged:
+		case ObjType::MOB_Peaceful_ranged: {
+			m_AttBoard[e.x - 1][e.y + 1] = 100;			m_AttBoard[e.x][e.y + 1] = 150;			m_AttBoard[e.x + 1][e.y + 1] = 100;
+			m_AttBoard[e.x - 1][e.y] = 150;				m_AttBoard[e.x][e.y] = 150;				m_AttBoard[e.x + 1][e.y] = 150;
+			m_AttBoard[e.x - 1][e.y - 1] = 100;			m_AttBoard[e.x][e.y - 1] = 150;			m_AttBoard[e.x + 1][e.y - 1] = 100;
+			break;
+		}
+		case ObjType::MOB_Boss: {
+													m_AttBoard[e.x - 1][e.y + 2] = 50;			m_AttBoard[e.x][e.y + 2] = 150;			m_AttBoard[e.x + 1][e.y + 2] = 50;
+			m_AttBoard[e.x - 2][e.y + 1] = 50;		m_AttBoard[e.x - 1][e.y + 1] = 100;			m_AttBoard[e.x][e.y + 1] = 150;			m_AttBoard[e.x + 1][e.y + 1] = 100;	  m_AttBoard[e.x + 2][e.y + 1] = 50;
+			m_AttBoard[e.x - 2][e.y] = 150;			m_AttBoard[e.x - 1][e.y] = 150;				m_AttBoard[e.x][e.y] = 200;				m_AttBoard[e.x + 1][e.y] = 150;		  m_AttBoard[e.x + 2][e.y] = 150;
+			m_AttBoard[e.x - 2][e.y - 1] = 50;		m_AttBoard[e.x - 1][e.y - 1] = 100;			m_AttBoard[e.x][e.y - 1] = 150;			m_AttBoard[e.x + 1][e.y - 1] = 100;	  m_AttBoard[e.x + 2][e.y - 1] = 50;
+													m_AttBoard[e.x - 1][e.y - 2] = 50;			m_AttBoard[e.x][e.y - 2] = 150;			m_AttBoard[e.x + 1][e.y - 2] = 50;
+			break;
+		}
+		case 2: {
+			for (int i = e.x - 2; i <= e.x + 2; ++i) {
+				for (int j = e.y - 2; j <= e.y + 2; ++j) {
+					m_AttBoard[i][j] = 100;
+				}
+			}
+			break;
+		}
+		case 100: {
+			for (int i = e.x - 4; i <= e.x + 4; ++i) {
+				for (int j = e.y - 4; j <= e.y + 4; ++j) {
+					m_AttBoard[i][j] = 500 + i*10;
+				}
+			}
+			break;
+		}
+		case 101: {
+			for (int i = e.x - 4; i <= e.x + 4; ++i) {
+				for (int j = e.y - 4; j <= e.y + 4; ++j) {
+					m_AttBoard[i][j] = 10;
+				}
+			}
+			break;
+		}
+
+		}
+		break;
+	}
+	case SC_STAT_CHANGE:
+	{
+		sc_packet_stat_change* my_packet = (sc_packet_stat_change*)p;
+		if (my_packet->id == Player->getID()) {
+			m_Client->setUserData(my_packet->lvl, my_packet->hp, my_packet->exp);
 		}
 		break;
 	}
@@ -307,6 +339,51 @@ void Scene::ReadGroundFile()
 	for (int i = 0; i < nVerts; ++i) {
 		m_Board[pVerts[i].x][pVerts[i].y] = 1;
 		//cout << (int)pVerts[i].x << ", " << (int)pVerts[i].y << "\n";
+	}
+}
+
+void Scene::update()
+{
+	g_Timer->getTimeset();
+	double timeElapsed = g_Timer->getTimeElapsed();
+	if (GameStatus == GAMESTATUS::RUNNING)
+	{
+		int currx = 0, curry = 0;
+		if (Player != nullptr)
+			currx = Player->getPosition().x, curry = Player->getPosition().y;
+
+		for (int i = 0; i < BOARD_WIDTH; ++i) {
+			for (int j = 0; j < BOARD_HEIGHT; ++j) {
+				if (m_AttBoard[i][j] != -1) {
+					m_AttBoard[i][j] -= 3;
+				}
+			}
+		}
+		int i = 0;
+		for (auto& log : m_Chatlog) {
+			if (log.second > 0)
+				log.second -= 1;
+			else {
+				m_Chatlog.pop_back();
+				break;
+			}
+		}
+
+		for (auto& p : m_Players) {
+			float time = p->getMsgTimer();
+			if (time > 0) {
+				p->setMsgTimer(time - timeElapsed);
+			}
+			else if (time < 0) {
+				p->setChatMsg(L"");
+			}
+		}
+	}
+	else if (GameStatus == GAMESTATUS::PAUSE)
+	{
+	}
+	else
+	{
 	}
 }
 
@@ -353,10 +430,12 @@ void Scene::render()
 					}
 				}
 			}
+
 		}
 	}
+
 	
-	// Ground, Attack Effect
+	// Ground Wall, Attack Effect
 	for (int i = 0; i < BOARD_WIDTH; ++i) {
 		for (int j = 0; j < BOARD_HEIGHT; ++j) {
 			if (m_Board[i][j] == 1) {
@@ -404,8 +483,16 @@ void Scene::render()
 		}
 	}
 
+	// chating
+	int i = 0;
+	for (auto& log : m_Chatlog) {
+		m_Renderer->DrawTextW(-330, -330 + (i * 20) , GLUT_BITMAP_9_BY_15, 0.5, 0, 1, &log.first[0]);
+		i++;
+	}
+
 	// Information Text
 	static WCHAR ID[50];
-	wsprintf(ID, L"ID : %s \nLevel : %d", m_Client->getUserName(), m_Client->getUserLevel());
+	wsprintf(ID, L"ID : %s \nLevel : %d \nHP : %d \nEXP : %d",
+		m_Client->getUserName(), m_Client->getUserLevel(), m_Client->getUserHP(), m_Client->getUserExp());
 	m_Renderer->DrawTextW(-330, 330, GLUT_BITMAP_TIMES_ROMAN_24, 0.5, 0, 1, ID);
 }

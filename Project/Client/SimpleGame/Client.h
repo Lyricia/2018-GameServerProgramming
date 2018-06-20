@@ -14,9 +14,11 @@ enum MSGTYPE
 class Client
 {
 	WSADATA				wsa;
-	int					ClientID;
+	int					ClientID = 0;
 	WCHAR				ClientName[10];
 	int					ClientLevel = 1;
+	int					ClientHP = 100;
+	int					ClientExp = 0;
 	Scene*				pScene = nullptr;
 
 	SOCKET				Server_Sock;
@@ -47,4 +49,9 @@ public:
 	void SendPacket(char* packet);
 	WCHAR* getUserName() { return ClientName; }
 	int getUserLevel() { return ClientLevel; }
+	int getUserHP() { return ClientHP; }
+	int getUserExp() { return ClientExp; }
+	int getUserID() { return ClientID; }
+
+	void setUserData(int level, int hp, int exp) { ClientLevel = level; ClientHP = hp; ClientExp = exp; }
 };

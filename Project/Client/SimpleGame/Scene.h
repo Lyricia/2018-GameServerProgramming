@@ -30,6 +30,11 @@ private:
 	list<Object*>					m_Players;
 	Object*							Player = nullptr;
 
+	list<pair<wstring, int>>		m_Chatlog;
+
+	int			pointx = 0;
+	int			pointy = 0;
+
 public:
 	Scene();
 	~Scene();

@@ -25,21 +25,33 @@ void Scene::buildScene()
 	GameStatus = GAMESTATUS::RUNNING;
 
 	for (int i = NPC_START; i < NUM_OF_NPC; ++i) {
-		do {
-			m_pNPCList[i].x = rand() % (BOARD_WIDTH - 100);
-			m_pNPCList[i].y = rand() % (BOARD_HEIGHT - 100);
-		} while (!isCollide(m_pNPCList[i].x, m_pNPCList[i].y));
+		m_pNPCList[i].ID = i;
+
+		if (i == NPC_START) {
+			m_pNPCList[i].x = 100, m_pNPCList[i].y = 100;
+			int newSpaceIdx = m_Server->GetSpaceIndex(i);
+			m_Server->GetSpace(newSpaceIdx).insert(i);
+			m_pNPCList[i].level = 200;
+			m_pNPCList[i].hp = m_pNPCList[i].level * 100;
+			m_pNPCList[i].ObjectType = ObjType::MOB_Boss;
+			m_pNPCList[i].exp = m_pNPCList[i].level * m_pNPCList[i].ObjectType * 5;
+		}
+		else {
+			do {
+				m_pNPCList[i].x = rand() % (BOARD_WIDTH - 100);
+				m_pNPCList[i].y = rand() % (BOARD_HEIGHT - 100);
+			} while (!isCollide(m_pNPCList[i].x, m_pNPCList[i].y));
+
+			SetSector(m_pNPCList[i]);
+		}
 
 		int newSpaceIdx = m_Server->GetSpaceIndex(i);
 		m_Server->GetSpace(newSpaceIdx).insert(i);
-		
-		SetSector(m_pNPCList[i]);
 
 		lua_getglobal(m_pNPCList[i].L, "setPosition");
 		lua_pushnumber(m_pNPCList[i].L, m_pNPCList[i].x);
 		lua_pushnumber(m_pNPCList[i].L, m_pNPCList[i].y);
 		int error = lua_pcall(m_pNPCList[i].L, 2, 0, 0);
-		lua_pop(m_pNPCList[i].L, 1);
 		if (error != 0)
 			DisplayLuaError(m_pNPCList[i].L, error);
 
@@ -48,10 +60,10 @@ void Scene::buildScene()
 		lua_pushnumber(m_pNPCList[i].L, m_pNPCList[i].ObjectType);
 		lua_pushnumber(m_pNPCList[i].L, m_pNPCList[i].level);
 		error = lua_pcall(m_pNPCList[i].L, 3, 0, 0);
-		if(error != 0)
+		if (error != 0)
 			DisplayLuaError(m_pNPCList[i].L, error);
-		lua_pop(m_pNPCList[i].L, 1);
-	}					 
+
+	}
 }
 
 bool Scene::isCollide(int x, int y)
@@ -125,7 +137,7 @@ void Scene::ProcessPacket(int clientid, unsigned char * packet)
 	{
 		cs_packet_attack* p = (cs_packet_attack*)packet;
 		if(m_pClientArr[p->id].lastattacktime + 500 < GetSystemTime())
-			AttackObject(p->id, 2);
+			AttackObject(p->id, m_pClientArr[p->id].attackrange);
 		break;
 	}
 
@@ -174,7 +186,7 @@ void Scene::MoveObject(int clientid, int oldSpaceIdx)
 			{
 				if (objidx == clientid) continue;
 				if (objidx < NPC_START && m_pClientArr[objidx].inUse == false) continue;
-				if ((m_Server->GetSector(objidx) - sectoridx) * (m_Server->GetSector(objidx) - sectoridx) != 1)continue;
+				if ((m_Server->GetSector(objidx) - sectoridx) * (m_Server->GetSector(objidx) - sectoridx) > 1)continue;
 				if (m_Server->CanSee(clientid, objidx) == false) continue;
 				// 시야 내에 있는 플레이어가 이동했다는 이벤트 발생
 				if (objidx >= NPC_START) {
@@ -262,34 +274,44 @@ void Scene::MoveObject(int clientid, int oldSpaceIdx)
 	m_Server->SendPacket(clientid, &sp);
 }
 
-void Scene::AttackObject(int attcker_id, int att_range, int targetid)
+void Scene::MoveByCoord(int x, int y, int clientid, int oldSpaceIdx)
+{
+	CClient& client = m_Server->GetClient(clientid);
+	client.x = x;
+	client.y = y;
+
+	m_Server->SendChatPacket(clientid, L"YOU DIED!");
+	MoveObject(clientid, oldSpaceIdx);
+}
+
+void Scene::AttackObject(int attacker_id, int att_range, int targetid)
 {
 	if (targetid != INVALID)
 	{
-		if (attcker_id < NPC_START) {
+		if (attacker_id < NPC_START) {
 			if (targetid < NPC_START) {
 				if (CalcDist(
-					m_pClientArr[attcker_id].x, m_pClientArr[attcker_id].y,
+					m_pClientArr[attacker_id].x, m_pClientArr[attacker_id].y,
 					m_pClientArr[targetid].x, m_pClientArr[targetid].y) < att_range) {
 					m_pClientArr[targetid].hp -= 10;
 				}
 			}
-			else if (attcker_id >= NPC_START) {
+			else if (attacker_id >= NPC_START) {
 				if (CalcDist(
-					m_pClientArr[attcker_id].x, m_pClientArr[attcker_id].y,
+					m_pClientArr[attacker_id].x, m_pClientArr[attacker_id].y,
 					m_pNPCList[targetid].x, m_pNPCList[targetid].y) < att_range) {
-					m_pNPCList[targetid].getDamaged(10, attcker_id);
+					m_pNPCList[targetid].getDamaged(10, attacker_id);
 				}
 			}
 		}
-		else if (attcker_id >= NPC_START) {
+		else if (attacker_id >= NPC_START) {
 
 		}
 	}
 
-	if (attcker_id < NPC_START) {
-		CClient& client = m_Server->GetClient(attcker_id);
-		int newSpaceIdx = m_Server->GetSpaceIndex(attcker_id);
+	if (attacker_id < NPC_START) {
+		CClient& client = m_Server->GetClient(attacker_id);
+		int newSpaceIdx = m_Server->GetSpaceIndex(attacker_id);
 
 		unordered_set<int> inRange_list;
 		unordered_set<int> view_list;
@@ -305,16 +327,16 @@ void Scene::AttackObject(int attcker_id, int att_range, int targetid)
 
 				for (int space_obj_idx : Space_objlist)
 				{
-					if (space_obj_idx == attcker_id) continue;
+					if (space_obj_idx == attacker_id) continue;
 					if (space_obj_idx < NPC_START && m_pClientArr[space_obj_idx].inUse == false) continue;
-					if (m_Server->CanSee(attcker_id, space_obj_idx) == false) continue;
+					if (m_Server->CanSee(attacker_id, space_obj_idx) == false) continue;
 					view_list.insert(space_obj_idx);
-					if (m_Server->CanSee(attcker_id, space_obj_idx, att_range) == false) continue;
+					if (m_Server->CanSee(attacker_id, space_obj_idx, att_range) == false) continue;
 					inRange_list.insert(space_obj_idx);
 				}
 			}
 		}
-		view_list.insert(attcker_id);
+		view_list.insert(attacker_id);
 
 		for (auto id_inRange : inRange_list) {
 			if (id_inRange < NPC_START) 
@@ -324,27 +346,44 @@ void Scene::AttackObject(int attcker_id, int att_range, int targetid)
 			}
 			else if (id_inRange >= NPC_START) 
 			{
+				int dmg = m_pClientArr[attacker_id].level * 10;
 				auto& target = m_pNPCList[id_inRange];
-				target.getDamaged(50, attcker_id);
+				target.getDamaged(dmg, attacker_id);
+				std::wstring str;
+				str = L"you hit " + std::to_wstring(id_inRange) + L"! Damage : " + std::to_wstring(dmg);
+				m_Server->SendChatPacket(attacker_id, &str[0]);
 				if (target.isDead())
 				{
 					m_Server->RemoveNPC(id_inRange, view_list);
-					m_Server->GetClient(attcker_id).EarnEXP(target.level*10);
+					m_Server->GetClient(attacker_id).EarnEXP(target.exp*10);
+
+					sc_packet_stat_change pc;
+					pc.size = sizeof(sc_packet_stat_change);
+					pc.type = SC_STAT_CHANGE;
+					pc.id = attacker_id;
+					pc.hp = m_Server->GetClient(attacker_id).hp;
+					pc.lvl = m_Server->GetClient(attacker_id).level;
+					pc.exp = m_Server->GetClient(attacker_id).exp;
+					m_Server->SendPacket(attacker_id, &pc);
+
+					std::wstring str;
+					str = L"you Kill " + std::to_wstring(id_inRange) + L"! You get " + std::to_wstring(target.exp * 10) + L"EXP!";
+					m_Server->SendChatPacket(attacker_id, &str[0]);
 				}
 			}
 		}
 	}
-	else if (attcker_id >= NPC_START) {
+	else if (attacker_id >= NPC_START) {
 	}
 
 	sc_packet_attack p;
 	p.size = sizeof(sc_packet_attack);
 	p.type = SC_ATTACK;
-	p.id = attcker_id;
+	p.id = attacker_id;
 	p.att_type = 0;
-	m_Server->SendPacketToAll(&p);
+	m_Server->SendPacketToViewer(attacker_id, &p);
 
-	m_pClientArr[attcker_id].lastattacktime = GetSystemTime();
+	m_pClientArr[attacker_id].lastattacktime = GetSystemTime();
 }
 
 void Scene::SetSector(CNPC & npc)
@@ -440,5 +479,7 @@ void Scene::ReadGroundPos()
 	for (int i = 0; i < nVerts; ++i) {
 		m_Board[pVerts[i].x][pVerts[i].y] = 1;
 	}
+
+	delete pVerts;
 }
 

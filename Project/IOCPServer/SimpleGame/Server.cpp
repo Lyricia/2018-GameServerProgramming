@@ -110,7 +110,7 @@ void Server::InitDB()
 			if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
 				retcode = SQLAllocHandle(SQL_HANDLE_STMT, h_dbc, &h_stmt);
 
-				DoTest();
+				//DoTest();
 			}
 		}
 	}
@@ -151,22 +151,26 @@ void Server::InitObjectList()
 		if (error != 0)
 			DisplayLuaError(L, error);
 		error = lua_pcall(L, 0, 0, 0);
+		if (error != 0)
+			DisplayLuaError(L, error);
 
 		lua_getglobal(L, "set_myid");
 		lua_pushnumber(L, i);
 		error = lua_pcall(L, 1, 0, 0);
+		if (error != 0)
+			DisplayLuaError(L, error);
 
 		lua_getglobal(L, "setPosition");
 		lua_pushnumber(L, NPCList[i].x);
 		lua_pushnumber(L, NPCList[i].y);
 		error = lua_pcall(L, 2, 0, 0);
-		lua_pop(L, 1);
+		if (error != 0)
+			DisplayLuaError(L, error);
 
 		lua_register(L, "API_sendMessage", CAPI_sendMessage);
 		lua_register(L, "API_get_x", CAPI_get_x);
 		lua_register(L, "API_get_y", CAPI_get_y);
 		lua_register(L, "API_MoveNPC", CAPI_Server_MoveNPC);
-		lua_register(L, "API_get_dist", CAPI_get_Dist);
 		lua_register(L, "API_Attack_Player", CAPI_Attack_Player);
 		lua_register(L, "API_get_playeractive", CAPI_get_playeractive);
 
@@ -273,11 +277,16 @@ void Server::SendPacket(int clientkey, void * packet)
 	WSASend(ClientArr[clientkey].Client_Sock, &o->wsaBuf, 1, NULL, 0, &o->wsaOverlapped, NULL);
 }
 
-void Server::SendPacketToAll(void * packet)
+void Server::SendPacketToViewer(int clientkey, void* packet)
 {
-	for (int i = 0; i < MAX_USER; ++i) {
-		if (ClientArr[i].bActive)
+	ClientArr[clientkey].viewlist_mutex.lock();
+	auto viewers = ClientArr[clientkey].viewlist;
+	ClientArr[clientkey].viewlist_mutex.unlock();
+
+	for (int i = 0; i < viewers.size(); ++i) {
+		if (ClientArr[i].bActive) {
 			SendPacket(i, packet);
+		}
 	}
 }
 
@@ -311,10 +320,9 @@ void Server::SendRemoveObject(int client, int objid)
 	SendPacket(client, &p);
 }
 
-void Server::SendChatPacket(int to, int from, WCHAR * message)
+void Server::SendChatPacket(int to, WCHAR * message)
 {
 	sc_packet_chat p;
-	p.id = from;
 	p.size = sizeof(p);
 	p.type = SC_CHAT;
 	wcsncpy_s(p.message, message, MAX_STR_SIZE);
@@ -322,10 +330,9 @@ void Server::SendChatPacket(int to, int from, WCHAR * message)
 	SendPacket(to, &p);
 }
 
-void Server::SendChatToAll(int from, WCHAR * message)
+void Server::SendChatToAll(WCHAR * message)
 {
 	sc_packet_chat p;
-	p.id = from;
 	p.size = sizeof(p);
 	p.type = SC_CHAT;
 	wcsncpy_s(p.message, message, MAX_STR_SIZE);
@@ -334,6 +341,18 @@ void Server::SendChatToAll(int from, WCHAR * message)
 		if (ClientArr[i].bActive)
 			SendPacket(i, &p);
 	}
+}
+
+void Server::SendStatusPacket(int clientkey)
+{
+	sc_packet_stat_change pc;
+	pc.size = sizeof(sc_packet_stat_change);
+	pc.type = SC_STAT_CHANGE;
+	pc.id = clientkey;
+	pc.hp = ClientArr[clientkey].hp;
+	pc.lvl = ClientArr[clientkey].level;
+	pc.exp = ClientArr[clientkey].exp;
+	Server_Instance->SendPacket(clientkey, &pc);
 }
 
 bool Server::ChkInSpace(int clientid, int targetid)
@@ -413,10 +432,9 @@ void Server::WorkThreadProcess()
 		case enumOperation::op_Move:
 		{
 			if (NPCList[key].bActive == true) {
-				lua_getglobal(NPCList[key].L, "Event_MoveNPC");
-				int error = lua_pcall(NPCList[key].L, 0, 0, 0);
-				if (error != 0)
-					DisplayLuaError(NPCList[key].L, error);
+				int error = lua_getglobal(NPCList[key].L, "Event_MoveNPC");
+ 				lua_call(NPCList[key].L, 0, 0);
+				//DisplayLuaError(NPCList[key].L, error);
 			}
 			delete oEx;
 			break;
@@ -443,7 +461,7 @@ void Server::WorkThreadProcess()
 				ClientArr[data->Key].hp = data->nHP;
 				ClientArr[data->Key].level = data->nCHAR_LEVEL;
 				ClientArr[data->Key].exp = data->nExp;
-				wcsncpy_s(ClientArr[data->Key].UserName, (WCHAR*)data->nName, 10);
+				wcsncpy_s(ClientArr[data->Key].UserName, (WCHAR*)data->nName, 9);
 				ClientArr[data->Key].bActive = true;
 			}
 			else {
@@ -470,9 +488,9 @@ void Server::WorkThreadProcess()
 		{
 			if (Mode == MODE_NORMAL) {
 				int player = oEx->EventTarget;
-				lua_getglobal(NPCList[key].L, "event_player_move");
+				int error = lua_getglobal(NPCList[key].L, "event_move");
 				lua_pushnumber(NPCList[key].L, player);
-				int error = lua_pcall(NPCList[key].L, 1, 0, 0);
+				error = lua_pcall(NPCList[key].L, 1, 0, 0);
 				//DisplayLuaError(NPCList[key].L, error);
 			}
 			delete oEx;
@@ -487,7 +505,18 @@ void Server::WorkThreadProcess()
 		}
 		case enumOperation::npc_respawn:
 		{
-			cout << key << " npc respawn\n";
+			NPCList[key].bActive = true;
+			MoveNPC(key, -2);
+			int error = lua_getglobal(NPCList[key].L, "setrenew");
+			error = lua_pcall(NPCList[key].L, 0, 0, 0);
+			delete oEx;
+			break;
+		}
+		case enumOperation::pc_heal:
+		{
+			ClientArr[key].getHealed();
+			AddTimerEvent(key, enumOperation::pc_heal, HEAL_TIME);
+			SendStatusPacket(key);
 			delete oEx;
 			break;
 		}
@@ -509,11 +538,13 @@ void Server::CreateConnection(UINT ClientKey)
 	p.x = ClientArr[ClientKey].x;
 	p.y = ClientArr[ClientKey].y;
 
+	int sectoridx = GetSector(ClientKey);
 
 	// to all players
 	for (int i = 0; i < MAX_USER; ++i)
 	{
 		if (true == ClientArr[i].inUse) {
+			if ((GetSector(i) - sectoridx) * (GetSector(i) - sectoridx) > 1) continue;
 			if (!CanSee(i, ClientKey))		continue;
 
 			ClientArr[i].viewlist_mutex.lock();
@@ -527,6 +558,7 @@ void Server::CreateConnection(UINT ClientKey)
 	{
 		if (i != ClientKey && true == ClientArr[i].inUse)
 		{
+			if ((GetSector(i) - sectoridx) * (GetSector(i) - sectoridx) > 1) continue;
 			if (!CanSee(ClientKey, i))		continue;
 
 			ClientArr[ClientKey].viewlist_mutex.lock();
@@ -543,9 +575,10 @@ void Server::CreateConnection(UINT ClientKey)
 
 	for (int i = NPC_START; i < NUM_OF_NPC; ++i)
 	{
+		if ((GetSector(i) - sectoridx) * (GetSector(i) - sectoridx) > 1) continue;
 		if (!ChkInSpace(ClientKey, i))	continue;
 		if (!CanSee(ClientKey, i))		continue;
-		 
+
 		ClientArr[ClientKey].viewlist_mutex.lock();
 		ClientArr[ClientKey].viewlist.insert(i);
 		ClientArr[ClientKey].viewlist_mutex.unlock();
@@ -566,6 +599,8 @@ void Server::CreateConnection(UINT ClientKey)
 	m_SpaceMutex[GetSpaceIndex(ClientKey)].lock();
 	m_Space[GetSpaceIndex(ClientKey)].insert(ClientKey);
 	m_SpaceMutex[GetSpaceIndex(ClientKey)].unlock();
+
+	AddTimerEvent(ClientKey, enumOperation::pc_heal, HEAL_TIME);
 }
 
 void Server::TimerThreadProcess()
@@ -578,13 +613,13 @@ void Server::TimerThreadProcess()
 				TimerEventMutex.unlock();
 				break;
 			}
-			
+
 			sEvent e = TimerEventQueue.top();
 			if (e.startTime > GetSystemTime()) {
 				TimerEventMutex.unlock();
 				break;
 			}
-			
+
 			TimerEventQueue.pop();
 			TimerEventMutex.unlock();
 
@@ -592,7 +627,21 @@ void Server::TimerThreadProcess()
 			{
 				stOverlappedEx* o = new stOverlappedEx();
 				o->eOperation = e.operation;
-				
+
+				PostQueuedCompletionStatus(h_IOCP, 0, e.id, reinterpret_cast<LPOVERLAPPED>(o));
+			}
+			else if (e.operation == enumOperation::npc_respawn)
+			{
+				stOverlappedEx* o = new stOverlappedEx();
+				o->eOperation = e.operation;
+
+				PostQueuedCompletionStatus(h_IOCP, 0, e.id, reinterpret_cast<LPOVERLAPPED>(o));
+			}
+			else if (e.operation == enumOperation::pc_heal)
+			{
+				stOverlappedEx* o = new stOverlappedEx();
+				o->eOperation = e.operation;
+
 				PostQueuedCompletionStatus(h_IOCP, 0, e.id, reinterpret_cast<LPOVERLAPPED>(o));
 			}
 		}
@@ -617,12 +666,25 @@ void Server::DBThreadProcess()
 
 			if (e.operation == enumOperation::db_login)
 			{
+				cout << "t1\n";
 				stOverlappedEx* o = new stOverlappedEx();
 				o->eOperation = e.operation;
 				DBUserData* data = (DBUserData*)o->io_Buf;
 				data->Key = e.IOCPKey;
-				SQLLEN cbID = 0, cbCHAR_LEVEL = 0, cbPosX = 0, cbPosY = 0, cbhp = 0, cbexp = 0, cbName = 0;
+				SQLLEN cbID = 0, cbCHAR_LEVEL = 0, cbPosX = 0, cbPosY = 0, cbhp = 0, cbexp = 0, cbName = 0, cbChk = 0;
+				SQLINTEGER loginChecker;
 
+				for (int i = 0; i < MAX_USER; ++i) {
+					if (ClientArr[i].bActive == true) {
+						if (ClientArr[i].UserName == std::wstring((WCHAR*)e.data)) {
+							data->nID = -1;
+							PostQueuedCompletionStatus(h_IOCP, 0, e.id, reinterpret_cast<LPOVERLAPPED>(o));
+							cout << "Login duplicated\n";
+							continue;
+						}
+					}
+				}
+				cout << "end\n";
 				SQLRETURN retcode = SQLAllocHandle(SQL_HANDLE_STMT, h_dbc, &h_stmt);
 				//retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC LoginProc " + std::to_wstring(e.id)).c_str(), SQL_NTS);
 				retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC LoginByName " + std::wstring((WCHAR*)e.data)).c_str(), SQL_NTS);
@@ -635,6 +697,7 @@ void Server::DBThreadProcess()
 					retcode = SQLBindCol(h_stmt, 5, SQL_C_LONG, &data->nHP, sizeof(SQLINTEGER), &cbhp);
 					retcode = SQLBindCol(h_stmt, 6, SQL_C_LONG, &data->nExp, sizeof(SQLINTEGER), &cbexp);
 					retcode = SQLBindCol(h_stmt, 7, SQL_C_WCHAR, &data->nName, MAX_NAME_LEN, &cbName);
+					retcode = SQLBindCol(h_stmt, 8, SQL_C_LONG, &loginChecker, sizeof(SQLINTEGER), &cbChk);
 
 					retcode = SQLFetch(h_stmt);
 					if (retcode == SQL_ERROR || retcode == SQL_SUCCESS_WITH_INFO) {
@@ -689,11 +752,11 @@ void Server::DBThreadProcess()
 void Server::DoTest()
 {
 	SQLINTEGER nID, nCHAR_LEVEL, nPosX, nPosY, nHP, nExp;
-	SQLWCHAR nName[10];
+	SQLWCHAR nName[50];
 	SQLLEN cbID = 0, cbCHAR_LEVEL = 0, cbPosX = 0, cbPosY = 0, cbhp = 0, cbexp = 0, cbName = 0;
 	
 	//SQLRETURN retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC loginProc " + std::to_wstring(1)).c_str(), SQL_NTS);
-	SQLRETURN retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC LoginByName " + std::wstring(L"test")).c_str(), SQL_NTS);
+	SQLRETURN retcode = SQLExecDirectW(h_stmt, (SQLWCHAR *)(L"EXEC LoginByName " + std::wstring(L"test123")).c_str(), SQL_NTS);
 	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
 
 		// Bind columns 1, 2, and 3  
@@ -704,7 +767,7 @@ void Server::DoTest()
 
 		retcode = SQLBindCol(h_stmt, 5, SQL_C_LONG, &nHP, sizeof(SQLINTEGER), &cbhp);
 		retcode = SQLBindCol(h_stmt, 6, SQL_C_LONG, &nExp, sizeof(SQLINTEGER), &cbexp);
-		retcode = SQLBindCol(h_stmt, 7, SQL_C_WCHAR, &nName, 10, &cbName);
+		retcode = SQLBindCol(h_stmt, 7, SQL_C_WCHAR, &nName, 50, &cbName);
 
 
 		// Fetch and print each row of data. On an error, display a message and exit.  
@@ -712,6 +775,7 @@ void Server::DoTest()
 			retcode = SQLFetch(h_stmt);
 			if (retcode == SQL_ERROR || retcode == SQL_SUCCESS_WITH_INFO) {
 				cout << "Error2 " << retcode << " \n";
+				HandleDiagnosticRecord(h_stmt, SQL_HANDLE_STMT, retcode);
 			}
 			if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO)
 				wprintf(L"%d\t: %d\t %d\t %d\t %d\t %s\n", i + 1, nID, nCHAR_LEVEL, nPosX, nPosY, nName);
@@ -900,9 +964,11 @@ void Server::DisConnectClient(int key)
 void Server::MoveNPC(int key, int dir)
 {
 	////////////////////////////////////////////////////////////////////////////////
-
+	
 	if (NPCList[key].bActive == false)
 		return;
+	bool respawn = false;
+	if (dir == -2) respawn = true;
 
 	int oldSpaceIdx = GetSpaceIndex(key);
 	if (dir == -1) {
@@ -937,7 +1003,6 @@ void Server::MoveNPC(int key, int dir)
 			NPCList[key].x++; break;
 		}
 		break;
-
 	default:
 		break;
 	}
@@ -946,14 +1011,16 @@ void Server::MoveNPC(int key, int dir)
 	lua_pushnumber(NPCList[key].L, NPCList[key].x);
 	lua_pushnumber(NPCList[key].L, NPCList[key].y);
 	int error = lua_pcall(NPCList[key].L, 2, 0, 0);
-	if(error != 0)
+	if (error != 0) {
+		cout << "npc move\n";
 		DisplayLuaError(NPCList[key].L, error);
-	lua_pop(NPCList[key].L, 1);
+	}
 	
 	int NewSpaceIdx = GetSpaceIndex(key);
-	if (oldSpaceIdx != NewSpaceIdx) {
+	if (oldSpaceIdx != NewSpaceIdx || respawn) {
 		m_SpaceMutex[oldSpaceIdx].lock();
-		m_Space[oldSpaceIdx].erase(key);
+		if (m_Space[oldSpaceIdx].count(key) != 0)
+			m_Space[oldSpaceIdx].erase(key);
 		m_SpaceMutex[oldSpaceIdx].unlock();
 
 		m_SpaceMutex[NewSpaceIdx].lock();
@@ -1031,14 +1098,14 @@ void Server::RemoveNPC(int key, std::unordered_set<int>& viewlist)
 
 int Server::GetSector(int idx)
 {
-	CNPC* cl;
+	CNPC* cl = nullptr;
 	if (idx < NPC_START) {
 		cl = &ClientArr[idx];
 	}
 	else if (idx >= NPC_START) {
 		cl = &NPCList[idx];
 	}
-
+	
 	// Sector 4
 	if (cl->y <= 120) {
 		return 4;

@@ -14,7 +14,8 @@ enum MSGTYPE
 enum enumOperation {
 	op_Send, op_Recv, op_Move,
 	db_login, db_logout,
-	npc_player_move, npc_bye, npc_respawn
+	npc_player_move, npc_bye, npc_respawn,
+	pc_heal
 };
 
 enum ServerOperationMode {
@@ -71,12 +72,8 @@ public:
 		int error = lua_getglobal(L, "event_get_Damaged");
 		lua_pushnumber(L, damage);
  		lua_pushnumber(L, attacker);
-		error = lua_pcall(L, 2, 0, 0);
-
-		lua_getglobal(L, "hp");
-		hp = (int)lua_tointeger(L, -1);
-		lua_pop(L, 2);
-		cout << hp << endl;
+		error = lua_pcall(L, 2, 1, 0);
+		hp = lua_tointeger(L, lua_gettop(L));
 	}
 	bool isDead() {
 		return hp <= 0;
@@ -97,22 +94,48 @@ public:
 	unsigned char	prev_packet[MAX_PACKET_SIZE];
 	
 	DWORD			exp;
-	int				explimit = 100;
+	DWORD			explimit = 100;
 
 	long long		lastattacktime = 0;
+	char			attackrange = 1;
+
+	void getHealed() {
+		if (hp < level * 100)
+			hp += level * 10;
+		else
+			hp = level * 100;
+	}
 
 	void getDamaged(int damage, int attacker) {
-		hp -= damage;
-		//cout << attacker << " attack " << ID << " || damage : " << damage << " || hp : " << hp << "\n";
+		if (hp < damage) {
+			hp = 0;
+			return;
+		}
+		else {
+			hp -= damage;
+		}
 	}
+
 	void EarnEXP(int _exp) {
 		exp += _exp;
 		while (true) {
 			if (exp > explimit) {
 				level++;
+				if (level % 50 == 0)
+					attackrange++;
+				if (level > 254) {
+					level = 254;
+					hp = 25500;
+				}
+				else
+					hp = level * 100;
 				exp -= explimit;
-				explimit *= 2;
-				cout << "level up " << (int)level << ", exp : " << exp;
+				if (exp < 0) exp = 0;
+				if (explimit >= MAXDWORD) {
+					explimit = MAXDWORD;
+				}
+				else
+					explimit *= 2;
 			}
 			else {
 				break;
@@ -197,17 +220,19 @@ public:
 	void CreateConnection(UINT clientkey);
 
 	void SendPacket(int clientkey, void* packet);
-	void SendPacketToAll(void* packet);
+	void SendPacketToViewer(int clientkey, void* packet);
 	void SendPutObject(int client, int objid);
 	void SendRemoveObject(int client, int objid);
-	void SendChatPacket(int to, int from, WCHAR * message);
-	void SendChatToAll(int from, WCHAR * message);
+	void SendChatPacket(int to, WCHAR * message);
+	void SendChatToAll(WCHAR * message);
+	void SendStatusPacket(int clientkey);
 
 	CClient& GetClient(int id) { return ClientArr[id]; }
 	CClient* GetClientArr() { return ClientArr; }
 	CNPC& GetNPC(int id) { return NPCList[id]; }
 	CNPC* GetNPClist() { return NPCList; }
 	HANDLE GetIOCP() { return h_IOCP; }
+	Scene* GetScene() { return m_pScene; }
 
 
 	void AddTimerEvent(UINT id, enumOperation op, long long time);
@@ -234,7 +259,7 @@ public:
 	}
 
 	bool ChkInSpace(int clientid, int targetid);
-	bool ChkSector();
+
 	void WorkThreadProcess();
 	void TimerThreadProcess();
 	void DBThreadProcess();
